@@ -12,6 +12,7 @@ export default tseslint.config(
       ".yarn/",
       "contracts/managed/",
       "tests/contracts/managed/",
+      "examples/consumer/managed/",
     ],
   },
   js.configs.recommended,

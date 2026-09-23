@@ -1,10 +1,14 @@
 {
   "compilerOptions": {
     "target": "ES2022",
-    "lib": ["ES2022"],
+    "lib": [
+      "ES2022"
+    ],
     "module": "NodeNext",
     "moduleResolution": "NodeNext",
-    "types": ["node"],
+    "types": [
+      "node"
+    ],
     "strict": true,
     "noUncheckedIndexedAccess": true,
     "exactOptionalPropertyTypes": true,
@@ -16,7 +20,29 @@
     "isolatedModules": true,
     "skipLibCheck": true,
     "allowJs": false,
-    "noEmit": true
+    "noEmit": true,
+    "paths": {
+      "compact-multi-segment-emit/codec": [
+        "./src/codec/index.ts"
+      ],
+      "compact-multi-segment-emit/codec/raw-transaction": [
+        "./src/codec/raw-transaction.ts"
+      ],
+      "compact-multi-segment-emit/transaction": [
+        "./src/transaction/index.ts"
+      ],
+      "compact-multi-segment-emit/contract": [
+        "./src/contract/index.ts"
+      ],
+      "compact-multi-segment-emit/adapters": [
+        "./src/adapters/index.ts"
+      ]
+    }
   },
-  "include": ["src", "tests", "vitest.config.ts"]
+  "include": [
+    "src",
+    "tests",
+    "examples",
+    "vitest.config.ts"
+  ]
 }

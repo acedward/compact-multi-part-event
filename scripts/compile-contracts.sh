@@ -1,9 +1,10 @@
 #!/usr/bin/env bash
 # Compile every Compact source with compactc 0.34.0 and ZKIR v3.
 #
-# Usage: scripts/compile-contracts.sh          # skip-zk build (default checks)
-#        scripts/compile-contracts.sh --zk     # additionally generate keys for the
-#                                              # reference emitter into build/zk/emitter
+# Usage: scripts/compile-contracts.sh               # skip-zk build (default checks)
+#        scripts/compile-contracts.sh --zk [name]   # additionally generate keys into
+#                                                   # build/zk/<name> for emitter, consumer
+#                                                   # or all (default all)
 #
 # Needs the release's `compactc` wrapper (or COMPACTC) and `zkir-v3` on PATH;
 # scripts/docker/run.sh provides both from the verified release archive.
@@ -28,10 +29,22 @@ compile() {
   "${COMPACTC}" --feature-zkir-v3 "$@" "${source}" "${target}"
 }
 
+# Deployable contracts: name, source.
+declare -A SOURCES=(
+  [emitter]=contracts/emitter.compact
+  [consumer]=examples/consumer/contracts/consumer.compact
+)
+
 compile contracts/emitter.compact contracts/managed/emitter --skip-zk
+compile examples/consumer/contracts/consumer.compact examples/consumer/managed/consumer --skip-zk
 compile tests/contracts/registry-emitter.compact tests/contracts/managed/registry-emitter --skip-zk
 compile tests/contracts/registry-sizes.compact tests/contracts/managed/registry-sizes --skip-zk
 
 if [[ "${1:-}" == "--zk" ]]; then
-  compile contracts/emitter.compact build/zk/emitter
+  which="${2:-all}"
+  for name in emitter consumer; do
+    if [[ "${which}" == "all" || "${which}" == "${name}" ]]; then
+      compile "${SOURCES[${name}]}" "build/zk/${name}"
+    fi
+  done
 fi

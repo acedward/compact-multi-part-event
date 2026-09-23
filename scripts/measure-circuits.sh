@@ -8,7 +8,7 @@ cd "$(dirname "$0")/.."
 
 echo "# compactc $(compactc --version) --feature-zkir-v3 --skip-zk; zkir-v3 $(zkir-v3 --version | awk '{print $2}') mock-compile -v"
 printf 'contract\tcircuit\tk\trows\ttable_rows\n'
-for zkir in contracts/managed/*/zkir/*.zkir tests/contracts/managed/*/zkir/*.zkir; do
+for zkir in contracts/managed/*/zkir/*.zkir examples/consumer/managed/*/zkir/*.zkir tests/contracts/managed/*/zkir/*.zkir; do
   contract="$(basename "$(dirname "$(dirname "${zkir}")")")"
   model="$(zkir-v3 mock-compile -v "${zkir}" 2>&1 | grep -o 'CircuitModel {[^}]*}')"
   field() { echo "${model}" | grep -o "$1: [0-9]*" | head -1 | awk '{print $2}'; }

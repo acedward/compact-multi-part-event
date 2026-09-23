@@ -14,6 +14,7 @@ coverage/
 # Verifier keys and their hashes are committed separately under contracts/keys/.
 contracts/managed/
 tests/contracts/managed/
+examples/consumer/managed/
 
 # Downloaded toolchains and caches
 .cache/
