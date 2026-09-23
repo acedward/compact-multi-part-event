@@ -43,7 +43,8 @@ complete second contract that uses the pattern from outside the library.
 
 2. **Build.** `yarn compile` (Docker: `scripts/docker/run.sh compile 'yarn compile'`)
    compiles with compactc 0.34.0 and `--feature-zkir-v3`; `yarn compile:zk` also
-   generates the proving keys into `build/zk/`.
+   generates the proving keys into `build/zk/`. `yarn build` compiles the library and the `cmse` CLI
+   (`yarn cmse --help`).
 
 3. **Deploy and publish.** For the reference emitter, with a funded wallet, a local proof
    server and the variables of [.env.example](.env.example):
