@@ -56,7 +56,8 @@
     "test:real-proof": "vitest run tests/real-proof.test.ts",
     "check:entrypoints": "node scripts/check-entrypoints.mjs",
     "cmse": "node dist/cli/main.js",
-    "check:external-consumer": "scripts/check-external-consumer.sh"
+    "check:external-consumer": "scripts/check-external-consumer.sh",
+    "check": "scripts/check.sh"
   },
   "dependencies": {
     "@midnight-ntwrk/compact-runtime": "0.19.0",

@@ -15,14 +15,18 @@ cd "$(dirname "$0")/.."
 
 mode="${1:-}"
 which="${2:-all}"
-declare -A COMMITTED=(
-  [emitter]=contracts/keys/emitter
-  [consumer]=examples/consumer/keys
-)
+# Committed keys directory per contract (no associative arrays: macOS ships bash 3.2).
+committed_of() {
+  case "$1" in
+    emitter) echo contracts/keys/emitter ;;
+    consumer) echo examples/consumer/keys ;;
+  esac
+}
 
 run_one() {
   local name="$1"
-  local build="build/zk/${name}" committed="${COMMITTED[${name}]}"
+  local build="build/zk/${name}" committed
+  committed="$(committed_of "${name}")"
   scripts/compile-contracts.sh --zk "${name}" >/dev/null
   local circuits=()
   for key in "${build}"/keys/*.verifier; do circuits+=("$(basename "${key}" .verifier)"); done

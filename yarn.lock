@@ -1692,6 +1692,8 @@ __metadata:
     typescript-eslint: "npm:8.66.0"
     vite: "npm:8.2.2"
     vitest: "npm:5.0.0"
+  bin:
+    cmse: dist/cli/main.js
   languageName: unknown
   linkType: soft
 

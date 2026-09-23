@@ -29,11 +29,13 @@ compile() {
   "${COMPACTC}" --feature-zkir-v3 "$@" "${source}" "${target}"
 }
 
-# Deployable contracts: name, source.
-declare -A SOURCES=(
-  [emitter]=contracts/emitter.compact
-  [consumer]=examples/consumer/contracts/consumer.compact
-)
+# Deployable contracts: name -> source (no associative arrays: macOS ships bash 3.2).
+source_of() {
+  case "$1" in
+    emitter) echo contracts/emitter.compact ;;
+    consumer) echo examples/consumer/contracts/consumer.compact ;;
+  esac
+}
 
 compile contracts/emitter.compact contracts/managed/emitter --skip-zk
 compile examples/consumer/contracts/consumer.compact examples/consumer/managed/consumer --skip-zk
@@ -44,7 +46,7 @@ if [[ "${1:-}" == "--zk" ]]; then
   which="${2:-all}"
   for name in emitter consumer; do
     if [[ "${which}" == "all" || "${which}" == "${name}" ]]; then
-      compile "${SOURCES[${name}]}" "build/zk/${name}"
+      compile "$(source_of "${name}")" "build/zk/${name}"
     fi
   done
 fi
