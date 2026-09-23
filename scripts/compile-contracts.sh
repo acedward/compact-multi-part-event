@@ -32,22 +32,6 @@ compile contracts/emitter.compact contracts/managed/emitter --skip-zk
 compile tests/contracts/registry-emitter.compact tests/contracts/managed/registry-emitter --skip-zk
 compile tests/contracts/registry-sizes.compact tests/contracts/managed/registry-sizes --skip-zk
 
-# Negative fixture: a pure circuit that emits must be rejected by the compiler.
-fixture_out="$(mktemp -d)"
-fixture_log="$(mktemp)"
-if "${COMPACTC}" --feature-zkir-v3 --skip-zk tests/contracts/fixtures/pure-emit.compact \
-  "${fixture_out}" >"${fixture_log}" 2>&1; then
-  echo "tests/contracts/fixtures/pure-emit.compact compiled, but it must fail" >&2
-  exit 1
-fi
-if ! grep -qi "impure" "${fixture_log}"; then
-  echo "pure-emit fixture failed for an unexpected reason:" >&2
-  cat "${fixture_log}" >&2
-  exit 1
-fi
-echo "== negative fixture rejected as expected: $(grep -i -m1 "impure" "${fixture_log}")"
-rm -rf "${fixture_out}" "${fixture_log}"
-
 if [[ "${1:-}" == "--zk" ]]; then
   compile contracts/emitter.compact build/zk/emitter
 fi

@@ -8,6 +8,11 @@
  * The witness secrets these helpers handle are private proof inputs: keep them in
  * protected storage, never log them, and only send them to a proof server you run.
  *
+ * Both examples rank below the contract's maintenance authority, which can delete
+ * every circuit and install new ones (for example an `emitPart` without the check).
+ * A reader who trusts events because only the whitelisted secret can emit is also
+ * trusting whoever holds that authority.
+ *
  * @module
  */
 import { createHash } from "node:crypto";

@@ -30,25 +30,27 @@ export const ascii = (text: string): Uint8Array => new TextEncoder().encode(text
 /** A 32-byte value filled with one byte (handy distinct secrets). */
 export const filled32 = (byte: number): Uint8Array => new Uint8Array(32).fill(byte);
 
+const threeDigits = (value: number): string => String(value).padStart(3, "0");
+
 /**
  * Test-local tail construction straight from the normative wire table (not the
- * library writer): "p:n" ASCII in bytes 0..7, length u64 LE in 8..15, 208 data
- * bytes in 16..223, zero padding.
+ * library writer): "ppp:nnn" ASCII in bytes 0..6, byte 7 zero, length u64 LE in
+ * 8..15, 208 data bytes in 16..223, zero padding.
  */
 export const specTails = (message: Uint8Array): Uint8Array[] => {
   const total = Math.max(1, Math.ceil(message.byteLength / 208));
   return Array.from({ length: total }, (_, index) => {
     const tail = new Uint8Array(224);
-    tail.set(ascii(`${String(index + 1)}:${String(total)}`), 0);
+    tail.set(ascii(`${threeDigits(index + 1)}:${threeDigits(total)}`), 0);
     new DataView(tail.buffer).setBigUint64(8, BigInt(message.byteLength), true);
     tail.set(message.subarray(index * 208, (index + 1) * 208), 16);
     return tail;
   });
 };
 
-/** 32-byte event name for part `p` of `n`, from the normative wire table. */
+/** `pad("mip-xxxx[v1]:ppp:nnn", 32)`, from the normative wire table. */
 export const specName = (position: number, total: number): Uint8Array => {
   const name = new Uint8Array(32);
-  name.set(ascii(`mip-xxxx[v1]:${String(position)}:${String(total)}`), 0);
+  name.set(ascii(`mip-xxxx[v1]:${threeDigits(position)}:${threeDigits(total)}`), 0);
   return name;
 };
