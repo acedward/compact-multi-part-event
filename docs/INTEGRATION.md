@@ -52,7 +52,7 @@ export circuit emitPart(requestId: Bytes<32>, payload: Bytes<224>): [] {
 }
 ```
 
-Choosing the access control:
+Choosing the access control (both are examples; pick per use case, alone or together):
 
 - **`EmitterWhitelist`**: one emitter. The constructor stores
   `emitterAuthorityOf(secret)` (SHA-256 of a domain tag and the secret, computed off
