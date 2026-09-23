@@ -276,6 +276,17 @@ ledger of stagenet's node 2.0.0-d9729c13), midnight-js 5.0.0-beta.7, wallet-sdk-
 midnight-js 5.0.0-beta.8, ledger-v9 1.0.0-rc.4, wallet-sdk-facade 5.0.0-beta.3 and proof
 server 9.0.0-rc.7.
 
+## Acknowledgments
+
+The original idea comes from [SIG Network](https://sig.network). Its SGN1 event protocol
+for Midnight carried a request as a sequence of `Misc` events, each holding a 32-byte
+request ID followed by a 224-byte tail; the request ID was the SHA-256 of the ordered,
+padded tails, and every part was emitted in the transaction's guaranteed section (see
+the [archived description](https://github.com/sig-net/midnight-integration/blob/620c550ee2002dbb51955093a04c0060d2985256/events-migration.md)).
+This repository keeps those widths and that hash rule and generalizes the pattern to
+arbitrary messages. Its event names, metadata layout and access-control examples are its
+own, and it claims no compatibility with SIG Network's protocols.
+
 ## License
 
 Apache-2.0; see [LICENSE](LICENSE) and [NOTICE](NOTICE).
