@@ -23,8 +23,8 @@ sums_file="$(mktemp)"
 trap 'rm -f "${sums_file}"' EXIT
 printf '%s\n' "${PINNED}" >"${sums_file}"
 
-docker volume inspect "${CMSE_PARAMS_VOLUME}" >/dev/null 2>&1 || docker volume create "${CMSE_PARAMS_VOLUME}" >/dev/null
-if docker run --rm --name "${CMSE_DOCKER_PREFIX}-params-check" -v "${CMSE_PARAMS_VOLUME}:/zk-params" \
+docker volume inspect "${CMSE_PARAMS_VOLUME}" >/dev/null 2>&1 || docker volume create --label "${CMSE_LABEL}" "${CMSE_PARAMS_VOLUME}" >/dev/null
+if docker run --rm --label "${CMSE_LABEL}" --name "${CMSE_DOCKER_PREFIX}-params-check" -v "${CMSE_PARAMS_VOLUME}:/zk-params" \
   -v "${sums_file}:/sums:ro" "${CMSE_NODE_IMAGE}" bash -c 'cd /zk-params && sha256sum -c --quiet /sums' \
   >/dev/null 2>&1; then
   echo "public parameters k=10..17 present and verified in ${CMSE_PARAMS_VOLUME}"

@@ -2,8 +2,10 @@
 # Shared settings for the containerized repository commands. Source it; do not run it.
 #
 # Every Docker resource these scripts create is named with the prefix
-# ${CMSE_DOCKER_PREFIX} (default "cmse"), and scripts/docker/teardown.sh removes
-# exactly those resources.
+# ${CMSE_DOCKER_PREFIX} (default "cmse") and carries the label ${CMSE_LABEL}, and
+# scripts/docker/teardown.sh removes exactly those resources: by label or exact name,
+# never by a name prefix, so another prefix that starts with this one (cmse-p3-* for the
+# default cmse) is left alone.
 
 CMSE_REPO_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd -P)"
 CMSE_DOCKER_PREFIX="${CMSE_DOCKER_PREFIX:-cmse}"
@@ -22,6 +24,7 @@ CMSE_CACHE_VOLUME="${CMSE_DOCKER_PREFIX}-cache"
 CMSE_PARAMS_VOLUME="${CMSE_DOCKER_PREFIX}-zk-params"
 CMSE_NETWORK="${CMSE_DOCKER_PREFIX}-net"
 CMSE_PROOF_CONTAINER="${CMSE_DOCKER_PREFIX}-proof-server"
+CMSE_LABEL="cmse.prefix=${CMSE_DOCKER_PREFIX}"
 
 # Architecture of the Docker engine, in Compact release naming (aarch64 / x86_64).
 cmse_engine_arch() {

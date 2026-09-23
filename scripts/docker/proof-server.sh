@@ -15,7 +15,7 @@ source "$(dirname "$0")/common.sh"
 
 case "${1:-}" in
   up)
-    docker network inspect "${CMSE_NETWORK}" >/dev/null 2>&1 || docker network create "${CMSE_NETWORK}" >/dev/null
+    docker network inspect "${CMSE_NETWORK}" >/dev/null 2>&1 || docker network create --label "${CMSE_LABEL}" "${CMSE_NETWORK}" >/dev/null
     port=""
     for _ in $(seq 1 50); do
       candidate=$((10001 + RANDOM % 50000))
@@ -27,7 +27,7 @@ case "${1:-}" in
     done
     [[ -n "${port}" ]] || { echo "no free port found" >&2; exit 1; }
     docker rm -f "${CMSE_PROOF_CONTAINER}" >/dev/null 2>&1 || true
-    docker run -d --name "${CMSE_PROOF_CONTAINER}" --network "${CMSE_NETWORK}" \
+    docker run -d --label "${CMSE_LABEL}" --name "${CMSE_PROOF_CONTAINER}" --network "${CMSE_NETWORK}" \
       -p "127.0.0.1:${port}:6300" \
       -v "${CMSE_PARAMS_VOLUME}:/params" \
       -e MIDNIGHT_PP=/params \

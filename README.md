@@ -312,8 +312,10 @@ Everything runs in Docker. No wallet, network account or live transaction is inv
    scripts/docker/proof-server.sh down
    ```
 
-6. **Clean up.** Every Docker resource the checks create is named `cmse-*` (or
-   `$CMSE_DOCKER_PREFIX-*`); this removes them and lists what remains:
+6. **Clean up.** Every Docker resource the checks create is named and labelled with the
+   prefix `cmse` (or `$CMSE_DOCKER_PREFIX`). This removes that prefix's resources and
+   those of its `--fresh-clone` run, leaves every other prefix alone, and lists what
+   remains:
 
    ```sh
    scripts/docker/teardown.sh

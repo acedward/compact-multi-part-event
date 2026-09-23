@@ -29,7 +29,7 @@ shift
 
 toolchain_dir="$("${CMSE_REPO_DIR}/scripts/toolchain/fetch-compact.sh")"
 for volume in "${CMSE_WORK_VOLUME}" "${CMSE_CACHE_VOLUME}"; do
-  docker volume inspect "${volume}" >/dev/null 2>&1 || docker volume create "${volume}" >/dev/null
+  docker volume inspect "${volume}" >/dev/null 2>&1 || docker volume create --label "${CMSE_LABEL}" "${volume}" >/dev/null
 done
 
 # 1. Copy the working tree into the volume, keeping generated output.
@@ -41,7 +41,7 @@ COPYFILE_DISABLE=1 tar -C "${CMSE_REPO_DIR}" ${tar_flags[@]+"${tar_flags[@]}"} \
   --exclude=./contracts/managed --exclude=./tests/contracts/managed \
   --exclude=./examples/consumer/managed \
   -cf - . |
-  docker run --rm -i --name "${CMSE_DOCKER_PREFIX}-sync-in" -v "${CMSE_WORK_VOLUME}:/work" \
+  docker run --rm -i --label "${CMSE_LABEL}" --name "${CMSE_DOCKER_PREFIX}-sync-in" -v "${CMSE_WORK_VOLUME}:/work" \
     "${CMSE_NODE_IMAGE}" bash -c '
       set -euo pipefail
       mkdir -p /work/repo /work/keep
@@ -65,7 +65,7 @@ if [[ "${CMSE_ZK_PARAMS:-0}" == "1" ]]; then
 fi
 set +e
 # shellcheck disable=SC2086 # CMSE_DOCKER_ENV is a list of arguments by design.
-docker run --rm --name "${CMSE_DOCKER_PREFIX}-${suffix}" \
+docker run --rm --label "${CMSE_LABEL}" --name "${CMSE_DOCKER_PREFIX}-${suffix}" \
   --network "${CMSE_DOCKER_NETWORK:-bridge}" \
   -v "${CMSE_WORK_VOLUME}:/work" \
   -v "${CMSE_CACHE_VOLUME}:/cache" \
@@ -83,7 +83,7 @@ set -e
 # 3. Copy requested outputs back to the working tree.
 if [[ -n "${CMSE_EXPORT:-}" ]]; then
   # shellcheck disable=SC2086 # CMSE_EXPORT is a list of paths by design.
-  docker run --rm --name "${CMSE_DOCKER_PREFIX}-sync-out" -v "${CMSE_WORK_VOLUME}:/work" \
+  docker run --rm --label "${CMSE_LABEL}" --name "${CMSE_DOCKER_PREFIX}-sync-out" -v "${CMSE_WORK_VOLUME}:/work" \
     "${CMSE_NODE_IMAGE}" bash -c "cd /work/repo && tar -cf - --ignore-failed-read ${CMSE_EXPORT}" |
     tar -C "${CMSE_REPO_DIR}" -xf -
 fi

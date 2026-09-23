@@ -5,7 +5,7 @@ set -euo pipefail
 source "$(dirname "$0")/docker/common.sh"
 
 image="python:3.13-slim@sha256:8d9d0b8bcf6506481eae4907c18f5e3e7902e629f5f6d684f9e7c32e85e3ddf0"
-generated="$(docker run --rm --name "${CMSE_DOCKER_PREFIX}-vectors" --network none \
+generated="$(docker run --rm --label "${CMSE_LABEL}" --name "${CMSE_DOCKER_PREFIX}-vectors" --network none \
   -v "${CMSE_REPO_DIR}/vectors:/vectors:ro" "${image}" python3 /vectors/derive.py)"
 if [[ "${1:-}" == "--check" ]]; then
   if [[ "${generated}" != "$(cat "${CMSE_REPO_DIR}/vectors/v1.json")" ]]; then
