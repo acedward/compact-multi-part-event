@@ -92,7 +92,11 @@ def valid_vectors():
             publication("len-%d" % length, pattern(length), "pattern (i*37+11) mod 256")
         )
     vectors.append(
-        publication("parts-46", pattern(46 * DATA), "46 full parts: the measured one-block fit")
+        publication(
+            "parts-46",
+            pattern(46 * DATA),
+            "46 full parts (format vector; the prototype's block fit without access control)",
+        )
     )
     zeros = bytearray(pattern(300, 5))
     for i in (0, 1, 150, 207, 208, 209):

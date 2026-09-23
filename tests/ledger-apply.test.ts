@@ -4,7 +4,7 @@
  * ledger-v9 state with proofs erased. Checks: success, exactly N `emitPart` logs in
  * call order, raw-transaction extraction equal to the applied events, wallet-free
  * verification accepting the publication, unchanged contract state, replay in two
- * transactions, and the 46-part construction.
+ * transactions, and a 46-part construction.
  */
 import type * as ledger from "@midnightntwrk/ledger-v9";
 import { beforeAll, describe, expect, it } from "vitest";
@@ -178,7 +178,7 @@ describe("offline ledger application of composed publications", () => {
     expect(atoms).toEqual([288, 288, 81]);
   });
 
-  it("46 parts (the measured one-block fit) assemble guaranteed-only, apply and verify", async () => {
+  it("46 parts assemble guaranteed-only, apply and verify with proofs erased", async () => {
     const message = patternMessage(46 * 208, 9);
     const publication = encodePublication(message, WIDE);
     const built = await buildPublicationTransaction(
@@ -189,9 +189,10 @@ describe("offline ledger application of composed publications", () => {
     );
     const erased = built.transaction.eraseProofs();
     const params = chain.state.parameters;
-    // Before proving, the ledger estimates each proof at its maximum size, so the
-    // unproven 46-part transaction does not fit its estimate; the real-proof test
-    // checks the proven transaction.
+    // Construction and application only. Before proving, the ledger estimates each
+    // proof at its maximum size, so the unproven 46-part transaction exceeds that
+    // estimate; with real proofs the reference emitter fits 33 parts in one block
+    // (tests/real-proof.test.ts, PROVE_LIMIT_AT).
     const preProof = (() => {
       try {
         blockFullnessCheck()(built.transaction, params, "pre-proof estimate");
