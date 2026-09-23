@@ -1,5 +1,5 @@
 // P3 live-run tool for the steps the `cmse` CLI does not cover. It uses the built library
-// (`dist/`), so run `yarn build` first. Public records only; secrets are read from the
+// (`dist/`), so run `npm run build` first. Public records only; secrets are read from the
 // protected files given by path and never printed.
 //
 //   node scripts/p3/chain-tool.mjs rejections --emitter <addr> --consumer <addr>

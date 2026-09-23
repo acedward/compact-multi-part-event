@@ -300,6 +300,7 @@ manifest = {
     "toolchain": {
         "compactc": "0.34.0 (runtime 0.19.0, ledger-9.1.0.0-rc.3, zkir-v3 3.0.0-rc.2, --feature-zkir-v3)",
         "@midnight-ntwrk/compact-runtime": "0.19.0",
+        # The live run of 2026-09-23 used Yarn at c4b9b75; the repository moved to npm afterwards.
         "@midnightntwrk/ledger-v9": "1.0.0-rc.3 (single copy, yarn why)",
         "@midnightntwrk/onchain-runtime-v4": "4.0.0-rc.3",
         "midnight-js": "5.0.0-beta.7 (types, http-client-proof-provider, node-zk-config-provider)",

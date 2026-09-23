@@ -81,8 +81,8 @@ complete second contract that uses the pattern from outside the library.
      ```
 
    Commit/reveal exists for contracts where several users can emit. A transaction stays
-   mergeable after it is sealed (proven, signed and bound; local ledger tests show such
-   merges apply), so without it a stranger can add a conflicting part for your request ID
+   mergeable after it is sealed (proven, signed and bound; stagenet included such a merge,
+   see [Live on stagenet](#live-on-stagenet)), so without it a stranger can add a conflicting part for your request ID
    to your transaction before it lands. The commit must be its own, earlier transaction:
    in the same transaction as the parts, the message is visible in the mempool and a
    stranger can register it first. See [Security considerations](#security-considerations).
@@ -219,44 +219,75 @@ their own (sealing freezes the intents present, not the set). That cannot alter 
 remove our calls, and with an access control nobody else can emit parts for the
 contract, so verification looks only at the expected contract's calls. Publications
 are tracked by transaction identifiers and the intent hash, not by the transaction hash,
-which a merge changes.
+which a merge changes. The publisher's own check is stricter than `verify`: `cmse publish`
+treats an included transaction in which another intent also calls the emitter as not its
+publication, while `verify` accepts every complete group in it.
 
 ## Live on stagenet
 
-> **Pending.** This section is filled in from the live run's evidence. Until then, no
-> value below is a live result; placeholders are written `<pending>`.
+Both contracts are deployed on Midnight stagenet and carry real publications, made on
+2026-09-23 (node 2.0.0-d9729c13, ledger 9.1 rc.3). Anyone can check them with `verify`;
+no wallet is needed. [evidence/stagenet/manifest.json](evidence/stagenet/manifest.json)
+records every transaction, event and message, with the raw bytes next to it.
 
-|                                  | Reference emitter (whitelist)                          | Consumer board (registration) |
-| -------------------------------- | ------------------------------------------------------ | ----------------------------- |
-| Contract address                 | `<pending>`                                            | `<pending>`                   |
-| Deploy transaction, block        | `<pending>`                                            | `<pending>`                   |
-| Registration transaction, block  | not applicable                                         | `<pending>`                   |
-| Publication transactions, blocks | `<pending>`                                            | `<pending>`                   |
-| Message sizes and part counts    | `<pending>`                                            | `<pending>`                   |
-| Event ids                        | `<pending>`                                            | `<pending>`                   |
-| Indexer                          | https://indexer.stagenet.shielded.tools/api/v4/graphql | same                          |
+| Contract                      | Address                                                            | Deploy transaction, block                                                  |
+| ----------------------------- | ------------------------------------------------------------------ | -------------------------------------------------------------------------- |
+| Reference emitter (whitelist) | `6240fbd956523c6f9a2feb78c0e72e63fba53a03486c5deac8c346ce51d23436` | `2e3e77bc8e64a1ced90fb696669d73ecbd0a229a59e6c13c55c8f532276a931c`, 588630 |
+| Consumer board (registration) | `cf12a32260fd443d0c1d6fce6316bd420fe850a278076e872834e35016c8d7ef` | `4b8743caeb327d6d7146aa39f2dfc181cdac790976df4091a1c6f33fb6a09671`, 588775 |
 
-Evidence manifest: `evidence/stagenet/manifest.json` (`<pending>`). Re-check any
-publication, with no wallet:
+| Publication                                      | Message                                | Transaction, block                                                         | Event ids   |
+| ------------------------------------------------ | -------------------------------------- | -------------------------------------------------------------------------- | ----------- |
+| M1, emitter                                      | 417 bytes, 3 parts                     | `79c26aa9153e09494f6db3a765130a0ced6e657d55ac2e72881b6007b0afca5e`, 588668 | 43016–43018 |
+| M2, emitter                                      | 1,024 bytes, 5 parts                   | `87b04195c1e2812d2060aee1c879e64cd9b1ae98bc62443f774799b64ed6db65`, 588691 | 43020–43024 |
+| M3, emitter: M1 again                            | 417 bytes, 3 parts                     | `65656150ece3f1d0673f543eeca2cdadd8bac52cb84a6b5ddfe62a1c4e21a45a`, 588705 | 43026–43028 |
+| A and B, emitter: two sealed publications merged | 300 bytes, 2 parts; 500 bytes, 3 parts | `7e8407de37393a2bbeeb005fd744335a5766f5cdcb00210c2d823cf842cd5230`, 588953 | 43042–43046 |
+| M1, consumer                                     | 417 bytes, 3 parts                     | `7eab20e01e9a1cec3c44fa145282ff6eab409a115c485e46ddec3b48099e9de4`, 588802 | 43034–43036 |
+
+- M1 and M3 carry the same message and request ID in two transactions: two separate
+  publications.
+- The consumer registered M1 in its own, earlier transaction
+  (`806ad115a07d2fc49097b678414ba21b074104e49070b52718f24c4793ee30df`, block 588787),
+  published it in a later one, and then released it
+  (`dbc5dfffccc6c44e0e577c6cf8fa05743a8e774698d096d8a1eff44e7eb81557`, block 588884).
+- A and B were each proven and bound (sealed) without a fee, then merged, and only then
+  did the wallet add its fee-paying intent. Stagenet included the result with status
+  `SUCCESS` and both publications verify from it: sealing does not stop a merge.
+- Rejected attempts (a wrong emitter secret, a message over the part cap, a tampered
+  record, a replay the node refused) are recorded in
+  [evidence/stagenet/rejections](evidence/stagenet/rejections).
+
+Check a publication from a clone, after `npm ci && npm run build`:
 
 ```sh
-npm run cmse -- verify --contract <address> --tx <publication transaction hash> \
+npm run cmse -- verify --contract 6240fbd956523c6f9a2feb78c0e72e63fba53a03486c5deac8c346ce51d23436 \
+  --tx 79c26aa9153e09494f6db3a765130a0ced6e657d55ac2e72881b6007b0afca5e \
   --node https://rpc.stagenet.shielded.tools
 ```
+
+It prints one `L1 OK` (request `fcde97e9…`, 3 parts, 417 bytes), three `L2 OK` (the
+guaranteed-only calls in one transaction, the match with Level 1, and the node's block
+holding the raw bytes) and one `L3 OK`, then `verified up to level 3`, and exits 0. For
+the consumer add `--kind consumer` with its address; in the merged transaction,
+`--request-id` picks A or B (their request IDs are in the manifest). To check offline
+from the saved bytes, replace `--node …` with
+`--raw-file evidence/stagenet/transactions/<hash>.hex --status SUCCESS --state-file evidence/stagenet/contracts/emitter-state-after-deploy.hex`
+(`consumer-state-after-deploy.hex` for the consumer).
+[evidence/stagenet/verify](evidence/stagenet/verify) holds the output of every check,
+run from a fresh clone with no wallet.
 
 ## What to expect
 
 Measured with real proofs (proof server 9.0.0-rc.6, 2 workers, 4 concurrent requests) and
-`LedgerParameters.initialParameters()`; stagenet's live parameters differ (larger block
-limits, other prices), and the live figures are `<pending>`:
+`LedgerParameters.initialParameters()` (the fee is the required fee under those
+parameters); stagenet's live parameters differ (larger block limits, other prices):
 
-| Parts | Message bytes | Prove              | Proven transaction | Block usage | Fee (DUST) |
-| ----- | ------------- | ------------------ | ------------------ | ----------- | ---------- |
-| 1     | 208           | 10.2 s             | 6,264 B            | 0.031       | 0.40       |
-| 2     | 399           | 13.9 s             | 12,134 B           | 0.060       | 0.75       |
-| 3     | 624           | 19.0 s             | 18,041 B           | 0.090       | 1.10       |
-| 8     | 1,647         | 40.9 s             | 47,477 B           | 0.237       | 2.85       |
-| 33    | 6,864         | 155.6 s (finalize) | 194,801 B          | 0.974       |            |
+| Parts | Message bytes | Prove              | Proven transaction | Block usage | Required fee (DUST) |
+| ----- | ------------- | ------------------ | ------------------ | ----------- | ------------------- |
+| 1     | 208           | 10.2 s             | 6,264 B            | 0.031       | 0.40                |
+| 2     | 399           | 13.9 s             | 12,134 B           | 0.060       | 0.75                |
+| 3     | 624           | 19.0 s             | 18,041 B           | 0.090       | 1.10                |
+| 8     | 1,647         | 40.9 s             | 47,477 B           | 0.237       | 2.85                |
+| 33    | 6,864         | 155.6 s (finalize) | 194,801 B          | 0.974       |                     |
 
 About 5.4 KB and 0.029 of a block per part; 34 parts exceed a block and are refused
 after proving, before the wallet is asked. The default cap is 8 parts (`--max-parts`).
@@ -264,6 +295,17 @@ Circuit sizes from `zkir-v3 mock-compile` (provisional; another compiler will gi
 values): reference `emitPart` k=17, 86,450 rows; registry `emitPart` k=17, 86,473;
 `registerMessage<N>` about 7,100 rows per part (N=1 k=14, N=3 k=15, N=5 k=16, k=19 from
 about N=37).
+
+On stagenet (live parameters, 2026-09-23), a 3-part publication used 0.021 of a block and
+a 5-part one 0.033, so one block fits about 169 parts (block usage binds; a 33-part
+publication was proven and balanced, not submitted, at 0.198 of a block). Proving and
+balancing took 20–32 s, and inclusion about 16 s more. The required fee was about 0.28
+DUST for 3 parts, 0.35 DUST for 5 parts, 1.46 DUST for the emitter's deploy and 8.8 DUST
+for the consumer's (7 verifier keys). The wallet pays more than the required fee: it
+declares a fee that still covers a price rise over `feeBlocksMargin` blocks (prices move
+by up to about 4.6% per block on stagenet), and the ledger consumes the declared amount.
+The live run used a margin of 100 blocks, about ×89: 24 DUST consumed for the 0.28 DUST
+publication.
 
 ## How to test
 
@@ -346,7 +388,8 @@ docs/INTEGRATION.md                          adding the pattern to your own cont
 - Who can emit decides what a stranger can do to your publication. Sealing a
   transaction (proving, signing, binding) freezes the intents it holds, not the set of
   intents: until it is included, anyone holding its finalized bytes can merge in an
-  intent of their own (local ledger tests show merged sealed transactions apply).
+  intent of their own (stagenet included two sealed publications merged together and a
+  fee intent added afterwards; see [Live on stagenet](#live-on-stagenet)).
   - An open contract where several users can emit: a stranger can merge a conflicting
     part for your request ID into your transaction, and readers then reject your
     publication. Commit/reveal (`MessageRegistry`) prevents it: only the committed owner
@@ -386,7 +429,6 @@ verification; your own tooling may differ.
 - The emission circuit must not write state (see How to use).
 - Registration circuits grow with N: k=19 from about 37 parts (expected to be much lower
   with the alternative compiler; to be measured once everything is stable and tested).
-- Live stagenet results are pending.
 
 ## Tested with
 
@@ -403,6 +445,7 @@ after upgrading.
 | wallet-sdk-facade                   | 5.0.0-beta.2                            | with its beta.2 sub-wallets                                             |
 | Proof server                        | `midnightntwrk/proof-server:9.0.0-rc.6` | carries the DUST keys (version 9) that stagenet's node expects          |
 | Indexer                             | GraphQL API v4                          | stagenet's public indexer                                               |
+| Stagenet node                       | 2.0.0-d9729c13                          | the live run of 2026-09-23                                              |
 | Node.js and npm                     | 24.21.0 and 11.19.0                     | the pinned `node:24-bookworm-slim` image of the checks                  |
 | Python                              | 3.13                                    | golden-vector derivation only                                           |
 

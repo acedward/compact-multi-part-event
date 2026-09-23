@@ -3,7 +3,8 @@
 # from a clean clone (no wallet, no secret, no CMSE_* variable). Each command's output and
 # exit status are saved; nothing here needs signing material.
 #
-# usage (inside the clone, after `yarn install --immutable && yarn build`):
+# usage (inside the clone, after `npm ci && npm run build`; the recorded run used the
+# Yarn equivalents at c4b9b75, before the repository moved to npm):
 #   scripts/p3/verify-all.sh <out dir> [<saved evidence dir for the offline checks>]
 set -uo pipefail
 out="${1:?usage: verify-all.sh <out dir> [<evidence dir>]}"
