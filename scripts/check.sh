@@ -25,7 +25,9 @@ if [[ "${1:-}" == "--fresh-clone" ]]; then
     echo "the fresh clone is not clean" >&2
     exit 1
   fi
-  # The verified compiler archive is reused rather than downloaded again.
+  # Start from empty Docker volumes every time (only this mode's own "-fresh" resources
+  # are removed). The verified compiler archive is reused rather than downloaded again.
+  CMSE_DOCKER_PREFIX="${CMSE_DOCKER_PREFIX}-fresh" "${CMSE_REPO_DIR}/scripts/docker/teardown.sh" >/dev/null
   COMPACT_TOOLCHAIN_DIR="${COMPACT_TOOLCHAIN_DIR:-$("${CMSE_REPO_DIR}/scripts/toolchain/fetch-compact.sh")}" \
     CMSE_DOCKER_PREFIX="${CMSE_DOCKER_PREFIX}-fresh" \
     "${clone_root}/repo/scripts/check.sh"
