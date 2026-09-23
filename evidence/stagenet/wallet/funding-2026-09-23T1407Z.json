@@ -1,0 +1,31 @@
+{
+  "identity": {
+    "networkId": "stagenet",
+    "unshieldedAddress": "mn_addr_stagenet1pwnaz9898ghta9nxret669r85g7x0enptrj78ev7desdrttcehuq56ha2w",
+    "shieldedAddress": "mn_shield-addr_stagenet1kuuqagackcfemrrkannzv0d3t6yr43wkgf7up4dpdg46k823ld2n2qemrs8dzxkz8pcdshh5xhdg2jnm0a2wtdjmmsea20hsw9263vgcqfmf9",
+    "dustAddress": "mn_dust_stagenet1wwkgfqsq838dtmf35mwatekavqhse6errcd5w3wf6xxmk3evuhdxyrp8nee",
+    "coinPublicKey": "b7380ea3b8b6139d8c76ece6263db15e883ac5d6427dc0d5a16a2bab1d51fb55",
+    "encryptionPublicKey": "35033b1c0ed11ac23870d85ef435da854a7b7f54e5b65bdc33d53ef07155a8b1"
+  },
+  "balances": {
+    "night": "10000000000",
+    "dust": "45508938940000000000",
+    "nightUtxos": [
+      {
+        "value": "5000000000",
+        "intentHash": "8018ecc9a50d546c6568b207321de048dc4cc49117a63964d387f8404d4b26f3",
+        "outputNo": 0,
+        "ctime": "2026-09-17T20:18:00.000Z",
+        "registeredForDustGeneration": true
+      },
+      {
+        "value": "5000000000",
+        "intentHash": "dceb1a13910390366fda808289ccc4978f77032f339439ba684371df2e9ea511",
+        "outputNo": 0,
+        "ctime": "2026-09-07T14:28:42.000Z",
+        "registeredForDustGeneration": true
+      }
+    ],
+    "shielded": {}
+  }
+}

@@ -1,0 +1,48 @@
+{
+  "fetchedAt": "2026-09-23T14:26:04.325Z",
+  "indexer": "https://indexer.stagenet.shielded.tools/api/v4/graphql",
+  "node": "https://rpc.stagenet.shielded.tools",
+  "__typename": "RegularTransaction",
+  "hash": "806ad115a07d2fc49097b678414ba21b074104e49070b52718f24c4793ee30df",
+  "identifiers": [
+    "008cee54c3b40d96e5349ff99cb0dd872e514dc01f49376193aea8b0df558b2ad1",
+    "0056a3007cbb4e136a362828409e2369198e0b00aa46b9ac8fecb09d3a4a9b1f47"
+  ],
+  "fee": "342949714285715",
+  "fees": {
+    "paidFees": "342949714285715",
+    "estimatedFees": "342949714285715"
+  },
+  "transactionResult": {
+    "status": "SUCCESS",
+    "segments": null
+  },
+  "block": {
+    "height": 588787,
+    "hash": "2302d90247994be93700f15e87e73a21ec9e28307f1b59bad054afa223f09ceb",
+    "timestamp": 1790173536000,
+    "timestampIso": "2026-09-23T14:25:36.000Z"
+  },
+  "contractActions": [
+    {
+      "__typename": "ContractCall",
+      "address": "cf12a32260fd443d0c1d6fce6316bd420fe850a278076e872834e35016c8d7ef",
+      "entryPoint": "register3"
+    }
+  ],
+  "rawBytes": 9183,
+  "rawSha256": "806ad115a07d2fc49097b678414ba21b074104e49070b52718f24c4793ee30df",
+  "nodeCrossCheck": {
+    "method": "chain_getBlock",
+    "extrinsicIndex": 4,
+    "rawBytesFoundInBlock": true
+  },
+  "finality": {
+    "finalizedHead": {
+      "number": 588789,
+      "hash": "967bdd7fcc7bf9b3232da3e6c939e8d3c80f888dc69fd7f9017f282b2b9bcd26"
+    },
+    "finalized": true,
+    "observedAt": "2026-09-23T14:26:04.328Z"
+  }
+}

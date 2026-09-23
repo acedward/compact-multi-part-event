@@ -1,0 +1,1461 @@
+{
+  "schema": "compact-multi-segment-emit/stagenet-evidence/1",
+  "run": "P3 live stagenet demonstration, 2026-09-23 (UTC)",
+  "network": {
+    "name": "stagenet",
+    "rpc": "https://rpc.stagenet.shielded.tools",
+    "indexer": "https://indexer.stagenet.shielded.tools/api/v4/graphql",
+    "indexerWs": "wss://indexer.stagenet.shielded.tools/api/v4/graphql/ws",
+    "system_version": "2.0.0-d9729c13",
+    "system_chain": "Midnight Stagenet",
+    "midnight_ledgerVersion": "=1.0.0",
+    "specVersion": 2000000,
+    "probe": "probe/node-rpc.json",
+    "ledgerParameters": {
+      "block": 588565,
+      "blockHash": "08ae849e84b14f40b67924a6e1adf5b3ef6c3dc7f844d6b89cd8235b28cba227",
+      "bytes": 791,
+      "sha256": "e759acbdcdfa49cfcde35ed76ba430f6880d4144187e70572da7a5e6d299570e",
+      "hex": "ledger-parameters/588565.hex",
+      "text": "ledger-parameters/588565.txt",
+      "blockLimits": {
+        "read_time": "2 s",
+        "compute_time": "2 s",
+        "block_usage": 1000000,
+        "bytes_written": 50000,
+        "bytes_churned": 50000000
+      },
+      "transaction_byte_limit": 1048576
+    }
+  },
+  "source": {
+    "repository": "https://github.com/acedward/compact-multi-segment-emit",
+    "commit": "c4b9b75f705a7409d7b7817d8243bcc61a19e5ad",
+    "branch": "p3-stagenet (worktree); the library and CLI code used were exactly this commit (P3 added only scripts/p3/ and evidence/)",
+    "dirtyDuringRun": false,
+    "fixesAfterTheRun": [
+      "81ae288 CLI: flush stdout and stderr before exiting (a --json report above 64 KiB was cut; no recorded result depends on it: records were written with --out/--record-out)"
+    ]
+  },
+  "toolchain": {
+    "compactc": "0.34.0 (runtime 0.19.0, ledger-9.1.0.0-rc.3, zkir-v3 3.0.0-rc.2, --feature-zkir-v3)",
+    "@midnight-ntwrk/compact-runtime": "0.19.0",
+    "@midnightntwrk/ledger-v9": "1.0.0-rc.3 (single copy, yarn why)",
+    "@midnightntwrk/onchain-runtime-v4": "4.0.0-rc.3",
+    "midnight-js": "5.0.0-beta.7 (types, http-client-proof-provider, node-zk-config-provider)",
+    "wallet-sdk-facade": "5.0.0-beta.2 (shielded/unshielded 4.0.0-beta.2, dust 5.0.0-beta.2, abstractions 3.0.0-beta.0, hd 3.1.0-beta.1)",
+    "node": "node:24-bookworm-slim@sha256:2fe369e969550cde8e867afc3fe370b260140cab4a23d467074295b42163d553 (Node 24.21.0), Yarn 4.17.1",
+    "proofServer": {
+      "image": "midnightntwrk/proof-server:9.0.0-rc.6@sha256:38a819eacde273f725551fdf90ca7c31ebf3c0ff145f3ed58ee35f92fb7ce95b",
+      "platform": "linux/arm64 (image id sha256:38a819ea...)",
+      "version": "9.0.0-rc.6",
+      "proofVersions": [
+        "V2",
+        "V3"
+      ],
+      "mode": "parameter fetching on (downloaded and verified k=10..15 and the Zswap/DUST keys from https://srs.midnight.network/), job capacity 32, published on 127.0.0.1 only",
+      "log": "logs/proof-server-all.log"
+    },
+    "decisions": "Q19 (SDK set), Q20 (explicit ContractDeploy), Q24/Q25 (sync, cache), Q27, Q28"
+  },
+  "circuits": {
+    "note": "K/rows provisional (Q16); verifier keys are the committed ones (scripts/keys.sh verify reproduced them in this run's baseline check)",
+    "emitter": {
+      "emitPart": {
+        "k": 17,
+        "rows": 86450,
+        "verifierSha256": "a14b8e2d443e2f2b60b24326097cdad929333ee998f00e503d30e8e01a0ca6f2"
+      },
+      "sha256sums": "contracts/keys/emitter/SHA256SUMS"
+    },
+    "consumer": {
+      "k/rows": {
+        "emitPart": "17/86473",
+        "register1": "14/12038",
+        "register2": "15/20089",
+        "register3": "15/26292",
+        "register5": "16/40546",
+        "announce": "13/3986",
+        "release": "13/3979"
+      },
+      "verifierSha256": {
+        "announce": "57fe7bbfa184d156bcf0b8d59d4cb644f3858364be12392829605f1396f8eb01",
+        "emitPart": "ba84609e5ebb011420f60db12567102b06761a4a1fa71331ec4747a1d1f2e30d",
+        "register1": "9321c53a2241664802827be105c91adf517cbf4104bf22c71fabadc6fbddc450",
+        "register2": "1256dfa4e6dcae95b304c5cea7c5d75b1dc2c5eb99d4c4b036319a29d2f01bc1",
+        "register3": "e24a8f16243884559aad20bf5e4aa77fdcc20b3ed4cdea33503b315f14cf9019",
+        "register5": "035e82232535b74fb1fbbfa8a836fd33ea6e9853f134fabf43846daa3d43d13f",
+        "release": "c2500915e1e7005adbcdf6d1944f90c2551a9f9d0c357467d11c2b410305a6d7"
+      },
+      "sha256sums": "examples/consumer/keys/SHA256SUMS"
+    }
+  },
+  "wallet": {
+    "unshieldedAddress": "mn_addr_stagenet1pwnaz9898ghta9nxret669r85g7x0enptrj78ev7desdrttcehuq56ha2w",
+    "shieldedAddress": "mn_shield-addr_stagenet1kuuqagackcfemrrkannzv0d3t6yr43wkgf7up4dpdg46k823ld2n2qemrs8dzxkz8pcdshh5xhdg2jnm0a2wtdjmmsea20hsw9263vgcqfmf9",
+    "dustAddress": "mn_dust_stagenet1wwkgfqsq838dtmf35mwatekavqhse6errcd5w3wf6xxmk3evuhdxyrp8nee",
+    "coinPublicKey": "b7380ea3b8b6139d8c76ece6263db15e883ac5d6427dc0d5a16a2bab1d51fb55",
+    "before": {
+      "at": "2026-09-23T14:07:24Z",
+      "nightStar": "10000000000",
+      "dustSpeck": "45508938940000000000",
+      "dustRegisteredUtxos": 2,
+      "firstCompleteSyncSeconds": 100,
+      "report": "wallet/funding-2026-09-23T1407Z.json"
+    },
+    "after": {
+      "at": "2026-09-23T14:47:28Z",
+      "nightStar": "10000000000",
+      "dustSpeck": "44522585945802522094"
+    },
+    "restoredSyncSeconds": 15
+  },
+  "contracts": [
+    {
+      "label": "reference emitter",
+      "address": "6240fbd956523c6f9a2feb78c0e72e63fba53a03486c5deac8c346ce51d23436",
+      "access": "whitelist",
+      "operations": [
+        "emitPart"
+      ],
+      "verifierKeySha256": {
+        "emitPart": "a14b8e2d443e2f2b60b24326097cdad929333ee998f00e503d30e8e01a0ca6f2"
+      },
+      "maintenanceAuthority": {
+        "threshold": 1,
+        "counter": 0,
+        "committee": [
+          {
+            "kind": "SCHNORR",
+            "key": "6d69646e696768743a7369676e61747572652d766572696679696e672d6b65795b76315d3a0084f082e286185b8c31a63a1f4ae70416f4d3f3b915bee4d499d3d1e5eac389"
+          }
+        ],
+        "recordedVerifyingKey": {
+          "tag": "schnorr",
+          "value": "0084f082e286185b8c31a63a1f4ae70416f4d3f3b915bee4d499d3d1e5eac389"
+        }
+      },
+      "emitterAuthority": "629dc84253023b3ac94b90e5520fd34f06e4081c7c658715c4d9de9cf58b7d4e",
+      "addressRecordedBeforeSubmission": true,
+      "cliStage": "verified",
+      "record": "deploy-emitter.json",
+      "stateAfterDeploy": "contracts/emitter-state-after-deploy.hex",
+      "deployTransaction": {
+        "hash": "2e3e77bc8e64a1ced90fb696669d73ecbd0a229a59e6c13c55c8f532276a931c",
+        "identifiers": [
+          "003e95d51e95e7bf4ac02aec7ed070b2d6235847141777e85410d08b07e2bfebe5",
+          "0037030b33acdce6c42d02948cd53fe4d5200a90b974e49c3be1cd151ce9912fc2"
+        ],
+        "status": "SUCCESS",
+        "segments": null,
+        "block": {
+          "height": 588630,
+          "hash": "8b65dcd0c39a0879cb450bb71b6ee6d52180bd284f693f0c2d11c893e9707394",
+          "timestamp": "2026-09-23T14:09:36.000Z"
+        },
+        "bytes": 5830,
+        "rawSha256": "2e3e77bc8e64a1ced90fb696669d73ecbd0a229a59e6c13c55c8f532276a931c",
+        "rawFile": "transactions/2e3e77bc8e64a1ced90fb696669d73ecbd0a229a59e6c13c55c8f532276a931c.hex",
+        "contractActions": [
+          {
+            "__typename": "ContractDeploy",
+            "address": "6240fbd956523c6f9a2feb78c0e72e63fba53a03486c5deac8c346ce51d23436"
+          }
+        ],
+        "fees": {
+          "requiredSpeck": "1461625924794561",
+          "requiredDust": "1.461625924794561",
+          "estimatedSpeck": "1461625924794561",
+          "declaredDustSpendSpeck": "130542393091477108",
+          "declaredDustSpendDust": "130.542393091477108",
+          "note": "required = indexer fees.paidFees; declared = the DUST spend's vFee the wallet declared (and the ledger consumed), see Q28"
+        },
+        "node": {
+          "chain_getBlock": "https://rpc.stagenet.shielded.tools",
+          "rawBytesFoundInBlock": true,
+          "extrinsicIndex": 3
+        },
+        "finality": {
+          "finalizedHead": {
+            "number": 588641,
+            "hash": "41625e0db63caf2e97f199573a8dd268e44a03f46e319ef52cb80b8abc51b871"
+          },
+          "finalized": true,
+          "observedAt": "2026-09-23T14:11:00.101Z"
+        }
+      },
+      "pinnedBlock": {
+        "height": 588627,
+        "hash": "d70fc8e85f71740ee80ee1462c2aa91e02f78ce654e2866776323dc2bd3f5999"
+      },
+      "cliLog": "logs/deploy-emitter.log"
+    },
+    {
+      "label": "consumer (MessageRegistry)",
+      "address": "cf12a32260fd443d0c1d6fce6316bd420fe850a278076e872834e35016c8d7ef",
+      "access": "registry",
+      "operations": [
+        "announce",
+        "emitPart",
+        "register1",
+        "register2",
+        "register3",
+        "register5",
+        "release"
+      ],
+      "verifierKeySha256": {
+        "announce": "57fe7bbfa184d156bcf0b8d59d4cb644f3858364be12392829605f1396f8eb01",
+        "emitPart": "ba84609e5ebb011420f60db12567102b06761a4a1fa71331ec4747a1d1f2e30d",
+        "register1": "9321c53a2241664802827be105c91adf517cbf4104bf22c71fabadc6fbddc450",
+        "register2": "1256dfa4e6dcae95b304c5cea7c5d75b1dc2c5eb99d4c4b036319a29d2f01bc1",
+        "register3": "e24a8f16243884559aad20bf5e4aa77fdcc20b3ed4cdea33503b315f14cf9019",
+        "register5": "035e82232535b74fb1fbbfa8a836fd33ea6e9853f134fabf43846daa3d43d13f",
+        "release": "c2500915e1e7005adbcdf6d1944f90c2551a9f9d0c357467d11c2b410305a6d7"
+      },
+      "maintenanceAuthority": {
+        "threshold": 1,
+        "counter": 0,
+        "committee": [
+          {
+            "kind": "SCHNORR",
+            "key": "6d69646e696768743a7369676e61747572652d766572696679696e672d6b65795b76315d3a65767aa944c1156eded9960a7768a8cbea83fe22d47c95009a8d975a2f586f2c"
+          }
+        ],
+        "recordedVerifyingKey": {
+          "tag": "schnorr",
+          "value": "65767aa944c1156eded9960a7768a8cbea83fe22d47c95009a8d975a2f586f2c"
+        }
+      },
+      "addressRecordedBeforeSubmission": true,
+      "cliStage": "verified",
+      "record": "deploy-consumer.json",
+      "stateAfterDeploy": "contracts/consumer-state-after-deploy.hex",
+      "deployTransaction": {
+        "hash": "4b8743caeb327d6d7146aa39f2dfc181cdac790976df4091a1c6f33fb6a09671",
+        "identifiers": [
+          "00f5e5f5217a77a98dfe522ad211ea6323bfaa4612097e8845720f1a8a5c340b37",
+          "00d1e2f072f741a934d747143756da4e83a67523922a3ca701803bcabec36a8b90"
+        ],
+        "status": "SUCCESS",
+        "segments": null,
+        "block": {
+          "height": 588775,
+          "hash": "beb94d02702d59e0ebeb414c05d33f9e07169e4d42dc46bba52ade9c6780dc01",
+          "timestamp": "2026-09-23T14:24:24.000Z"
+        },
+        "bytes": 18919,
+        "rawSha256": "4b8743caeb327d6d7146aa39f2dfc181cdac790976df4091a1c6f33fb6a09671",
+        "rawFile": "transactions/4b8743caeb327d6d7146aa39f2dfc181cdac790976df4091a1c6f33fb6a09671.hex",
+        "contractActions": [
+          {
+            "__typename": "ContractDeploy",
+            "address": "cf12a32260fd443d0c1d6fce6316bd420fe850a278076e872834e35016c8d7ef"
+          }
+        ],
+        "fees": {
+          "requiredSpeck": "8760778844368620",
+          "requiredDust": "8.760778844368620",
+          "estimatedSpeck": "8760778844368620",
+          "declaredDustSpendSpeck": "782791921790023464",
+          "declaredDustSpendDust": "782.791921790023464",
+          "note": "required = indexer fees.paidFees; declared = the DUST spend's vFee the wallet declared (and the ledger consumed), see Q28"
+        },
+        "node": {
+          "chain_getBlock": "https://rpc.stagenet.shielded.tools",
+          "rawBytesFoundInBlock": true,
+          "extrinsicIndex": 3
+        },
+        "finality": {
+          "finalizedHead": {
+            "number": 588777,
+            "hash": "66a7afbbcbe40278578a3ef7c669bac3182bb9740d5cebdb4c6d9b9b0ed0f78e"
+          },
+          "finalized": true,
+          "observedAt": "2026-09-23T14:24:53.679Z"
+        }
+      },
+      "pinnedBlock": {
+        "height": 588771,
+        "hash": "fcada502e5f74213c1cd8300f1068efef597f73f21a7f85ace6d7b7a2798571b"
+      },
+      "cliLog": "logs/deploy-consumer.log"
+    }
+  ],
+  "publications": [
+    {
+      "label": "M1",
+      "kind": "emitter",
+      "contract": "6240fbd956523c6f9a2feb78c0e72e63fba53a03486c5deac8c346ce51d23436",
+      "message": {
+        "file": "messages/m1.hex",
+        "bytes": 417,
+        "sha256": "89e144de0b0f2da569b4f34ff1ef2278d5edc22397bcbf78728b427170589d92"
+      },
+      "parts": 3,
+      "requestId": "fcde97e961102a0617cdf6d4628d58d425326b6ff634585e130c9a2509da071b",
+      "requestIdEqualsGoldenVector": true,
+      "segment": 33263,
+      "intentHash": "0729dbe54782aaab061a28227d8f896fd868fa84feb0c05f92632962bb425f35",
+      "pinnedBlock": {
+        "height": 588660,
+        "hash": "2159ac8cf3e78cb92745a624d3397759f3614019df5e95133add46a25701fbfe"
+      },
+      "ttl": "2026-09-23T14:32:36.000Z",
+      "finalizedRecord": "publications/m1.json",
+      "savedFinalizedBytesEqualOnChain": true,
+      "mergedByOthers": false,
+      "cliVerifiedFromRawBytes": true,
+      "normalizedCostLive": {
+        "readTime": 0.0034085,
+        "computeTime": 0.0099957782675,
+        "blockUsage": 0.020958,
+        "bytesWritten": 0.0064,
+        "bytesChurned": 0.000552
+      },
+      "transaction": {
+        "hash": "79c26aa9153e09494f6db3a765130a0ced6e657d55ac2e72881b6007b0afca5e",
+        "identifiers": [
+          "00a07a0a97084f0c6e4f1b69659a3a4f3e7c4a806ef8437904ca9101ef996be308",
+          "006824a1c562ccfa12bfc2f01cce3e61b6a988c8514bd43521ad14acbe7e320ec5"
+        ],
+        "status": "SUCCESS",
+        "segments": null,
+        "block": {
+          "height": 588668,
+          "hash": "7ddfd1c2770a097fb74a3f0d23c435837a9a41ab2e94167dacb560ba943dab1d",
+          "timestamp": "2026-09-23T14:13:24.000Z"
+        },
+        "bytes": 21026,
+        "rawSha256": "79c26aa9153e09494f6db3a765130a0ced6e657d55ac2e72881b6007b0afca5e",
+        "rawFile": "transactions/79c26aa9153e09494f6db3a765130a0ced6e657d55ac2e72881b6007b0afca5e.hex",
+        "contractActions": [
+          {
+            "__typename": "ContractCall",
+            "address": "6240fbd956523c6f9a2feb78c0e72e63fba53a03486c5deac8c346ce51d23436",
+            "entryPoint": "emitPart"
+          },
+          {
+            "__typename": "ContractCall",
+            "address": "6240fbd956523c6f9a2feb78c0e72e63fba53a03486c5deac8c346ce51d23436",
+            "entryPoint": "emitPart"
+          },
+          {
+            "__typename": "ContractCall",
+            "address": "6240fbd956523c6f9a2feb78c0e72e63fba53a03486c5deac8c346ce51d23436",
+            "entryPoint": "emitPart"
+          }
+        ],
+        "fees": {
+          "requiredSpeck": "278662857142858",
+          "requiredDust": "0.278662857142858",
+          "estimatedSpeck": "278662857142858",
+          "declaredDustSpendSpeck": "23971404719836773",
+          "declaredDustSpendDust": "23.971404719836773",
+          "note": "required = indexer fees.paidFees; declared = the DUST spend's vFee the wallet declared (and the ledger consumed), see Q28"
+        },
+        "node": {
+          "chain_getBlock": "https://rpc.stagenet.shielded.tools",
+          "rawBytesFoundInBlock": true,
+          "extrinsicIndex": 3
+        },
+        "finality": {
+          "finalizedHead": {
+            "number": 588674,
+            "hash": "354b6cce5bca784189db07920a6acdf037219a9c89affba2e788c567a807512e"
+          },
+          "finalized": true,
+          "observedAt": "2026-09-23T14:14:19.290Z"
+        },
+        "events": {
+          "file": "events/79c26aa9153e09494f6db3a765130a0ced6e657d55ac2e72881b6007b0afca5e.json",
+          "contract": "6240fbd956523c6f9a2feb78c0e72e63fba53a03486c5deac8c346ce51d23436",
+          "count": 3,
+          "ids": [
+            43016,
+            43017,
+            43018
+          ]
+        }
+      },
+      "timingsSeconds": {
+        "walletSyncRestored": 15.1,
+        "build": 0.9,
+        "finalize(prove+balance)": 27.6,
+        "proveRequestsSeconds (emitPart proofs, then the DUST-spend proof)": [
+          11.61,
+          15.68,
+          16.49,
+          0.27
+        ],
+        "submitReturnedAfter": 16.8,
+        "indexerSawItAfterSubmitReturn": 1.3,
+        "clock": "host clock; chain block timestamps run ~14 s behind"
+      },
+      "cliLog": "logs/publish-m1.log",
+      "verification": {
+        "command": "cmse verify --contract 6240fbd956523c6f9a2feb78c0e72e63fba53a03486c5deac8c346ce51d23436 --tx 79c26aa9153e09494f6db3a765130a0ced6e657d55ac2e72881b6007b0afca5e --level 3 --node https://rpc.stagenet.shielded.tools",
+        "levelReached": 3,
+        "requestedLevel": 3,
+        "exitStatus": 0,
+        "log": "verify/m1.log",
+        "report": "verify/m1.json",
+        "offline": {
+          "command": "cmse verify --contract 6240fbd956523c6f9a2feb78c0e72e63fba53a03486c5deac8c346ce51d23436 --raw-file /evidence/transactions/79c26aa9153e09494f6db3a765130a0ced6e657d55ac2e72881b6007b0afca5e.hex --tx 79c26aa9153e09494f6db3a765130a0ced6e657d55ac2e72881b6007b0afca5e --status SUCCESS --state-file /evidence/contracts/emitter-state-after-deploy.hex --level 3",
+          "levelReached": 3,
+          "exitStatus": 0,
+          "log": "verify/offline-m1.log"
+        }
+      }
+    },
+    {
+      "label": "M2",
+      "kind": "emitter",
+      "contract": "6240fbd956523c6f9a2feb78c0e72e63fba53a03486c5deac8c346ce51d23436",
+      "message": {
+        "file": "messages/m2.hex",
+        "bytes": 1024,
+        "sha256": "ffbad8f947474cfdd5b2bb22d7e0bf5ee8ba2b7af859d0c2bb28622db6a4be47"
+      },
+      "parts": 5,
+      "requestId": "08028167802fb109b91bd7686d14d91e5f0120a73d516c31ab2514feeb33d208",
+      "requestIdEqualsGoldenVector": true,
+      "segment": 1498,
+      "intentHash": "6ac2a0286e53cab106df43afd1b476f6a3a1b9f11bf0c046a4b17c13336cdde6",
+      "pinnedBlock": {
+        "height": 588682,
+        "hash": "8e7987b8b364f77526546a43f90b8f6a6e5ce75d2507c19473ebc131e543612d"
+      },
+      "ttl": "2026-09-23T14:34:48.000Z",
+      "finalizedRecord": "publications/m2.json",
+      "savedFinalizedBytesEqualOnChain": true,
+      "mergedByOthers": false,
+      "cliVerifiedFromRawBytes": true,
+      "normalizedCostLive": {
+        "readTime": 0.0043775,
+        "computeTime": 0.0152531070955,
+        "blockUsage": 0.032931,
+        "bytesWritten": 0.0064,
+        "bytesChurned": 0.00077674
+      },
+      "transaction": {
+        "hash": "87b04195c1e2812d2060aee1c879e64cd9b1ae98bc62443f774799b64ed6db65",
+        "identifiers": [
+          "000117a55e397c2dcff450b226f72521bcb94c7b1d744316e1cb4223341cba8692",
+          "00faa5c78ff341cd406fc874f601cf6a03d6517f46ecfc8eeb1ae9dc02042b4dcc"
+        ],
+        "status": "SUCCESS",
+        "segments": null,
+        "block": {
+          "height": 588691,
+          "hash": "bd1cc4ad6cac8623b4ed149e181fe2e9039de7db679d7c134eef8e1efc4e5d37",
+          "timestamp": "2026-09-23T14:15:42.000Z"
+        },
+        "bytes": 32999,
+        "rawSha256": "87b04195c1e2812d2060aee1c879e64cd9b1ae98bc62443f774799b64ed6db65",
+        "rawFile": "transactions/87b04195c1e2812d2060aee1c879e64cd9b1ae98bc62443f774799b64ed6db65.hex",
+        "contractActions": [
+          {
+            "__typename": "ContractCall",
+            "address": "6240fbd956523c6f9a2feb78c0e72e63fba53a03486c5deac8c346ce51d23436",
+            "entryPoint": "emitPart"
+          },
+          {
+            "__typename": "ContractCall",
+            "address": "6240fbd956523c6f9a2feb78c0e72e63fba53a03486c5deac8c346ce51d23436",
+            "entryPoint": "emitPart"
+          },
+          {
+            "__typename": "ContractCall",
+            "address": "6240fbd956523c6f9a2feb78c0e72e63fba53a03486c5deac8c346ce51d23436",
+            "entryPoint": "emitPart"
+          },
+          {
+            "__typename": "ContractCall",
+            "address": "6240fbd956523c6f9a2feb78c0e72e63fba53a03486c5deac8c346ce51d23436",
+            "entryPoint": "emitPart"
+          },
+          {
+            "__typename": "ContractCall",
+            "address": "6240fbd956523c6f9a2feb78c0e72e63fba53a03486c5deac8c346ce51d23436",
+            "entryPoint": "emitPart"
+          }
+        ],
+        "fees": {
+          "requiredSpeck": "353289540372546",
+          "requiredDust": "0.353289540372546",
+          "estimatedSpeck": "353289540372546",
+          "declaredDustSpendSpeck": "30055028079534893",
+          "declaredDustSpendDust": "30.055028079534893",
+          "note": "required = indexer fees.paidFees; declared = the DUST spend's vFee the wallet declared (and the ledger consumed), see Q28"
+        },
+        "node": {
+          "chain_getBlock": "https://rpc.stagenet.shielded.tools",
+          "rawBytesFoundInBlock": true,
+          "extrinsicIndex": 3
+        },
+        "finality": {
+          "finalizedHead": {
+            "number": 588693,
+            "hash": "8f4c761e8327c8adab5c8abad2e70190f5a4e35095f807498fddbc22347b6e7c"
+          },
+          "finalized": true,
+          "observedAt": "2026-09-23T14:16:11.956Z"
+        },
+        "events": {
+          "file": "events/87b04195c1e2812d2060aee1c879e64cd9b1ae98bc62443f774799b64ed6db65.json",
+          "contract": "6240fbd956523c6f9a2feb78c0e72e63fba53a03486c5deac8c346ce51d23436",
+          "count": 5,
+          "ids": [
+            43020,
+            43021,
+            43022,
+            43023,
+            43024
+          ]
+        }
+      },
+      "timingsSeconds": {
+        "walletSyncRestored": 15.1,
+        "build": 1.1,
+        "finalize(prove+balance)": 32.1,
+        "proveRequestsSeconds (emitPart proofs, then the DUST-spend proof)": [
+          7.44,
+          7.51,
+          13.73,
+          11.28,
+          8.28,
+          0.26
+        ],
+        "submitReturnedAfter": 17.7,
+        "indexerSawItAfterSubmitReturn": 1.2,
+        "clock": "host clock; chain block timestamps run ~14 s behind"
+      },
+      "cliLog": "logs/publish-m2.log",
+      "verification": {
+        "command": "cmse verify --contract 6240fbd956523c6f9a2feb78c0e72e63fba53a03486c5deac8c346ce51d23436 --tx 87b04195c1e2812d2060aee1c879e64cd9b1ae98bc62443f774799b64ed6db65 --level 3 --node https://rpc.stagenet.shielded.tools",
+        "levelReached": 3,
+        "requestedLevel": 3,
+        "exitStatus": 0,
+        "log": "verify/m2.log",
+        "report": "verify/m2.json",
+        "offline": {
+          "command": "cmse verify --contract 6240fbd956523c6f9a2feb78c0e72e63fba53a03486c5deac8c346ce51d23436 --raw-file /evidence/transactions/87b04195c1e2812d2060aee1c879e64cd9b1ae98bc62443f774799b64ed6db65.hex --tx 87b04195c1e2812d2060aee1c879e64cd9b1ae98bc62443f774799b64ed6db65 --status SUCCESS --state-file /evidence/contracts/emitter-state-after-deploy.hex --level 3",
+          "levelReached": 3,
+          "exitStatus": 0,
+          "log": "verify/offline-m2.log"
+        }
+      }
+    },
+    {
+      "label": "M3 (M1 again)",
+      "kind": "emitter",
+      "contract": "6240fbd956523c6f9a2feb78c0e72e63fba53a03486c5deac8c346ce51d23436",
+      "message": {
+        "file": "messages/m1.hex",
+        "bytes": 417,
+        "sha256": "89e144de0b0f2da569b4f34ff1ef2278d5edc22397bcbf78728b427170589d92"
+      },
+      "parts": 3,
+      "requestId": "fcde97e961102a0617cdf6d4628d58d425326b6ff634585e130c9a2509da071b",
+      "requestIdEqualsGoldenVector": true,
+      "segment": 33533,
+      "intentHash": "64d47eb320dad983718a2e335c7f95d55f22f6be1131714862989b71f706e9d5",
+      "pinnedBlock": {
+        "height": 588698,
+        "hash": "1ab95bd0bafb33c11084455c9e4c6d44815cb9311126a041266c615728d7dda8"
+      },
+      "ttl": "2026-09-23T14:36:24.000Z",
+      "finalizedRecord": "publications/m3.json",
+      "savedFinalizedBytesEqualOnChain": true,
+      "mergedByOthers": false,
+      "cliVerifiedFromRawBytes": true,
+      "normalizedCostLive": {
+        "readTime": 0.0034085,
+        "computeTime": 0.0099957782675,
+        "blockUsage": 0.020958,
+        "bytesWritten": 0.0064,
+        "bytesChurned": 0.000552
+      },
+      "transaction": {
+        "hash": "65656150ece3f1d0673f543eeca2cdadd8bac52cb84a6b5ddfe62a1c4e21a45a",
+        "identifiers": [
+          "00d76761ecf6b5704e30ed8c61d41541b60905e96ebabc8380c4edeea12734b0b2",
+          "00ca77f5e5712c810977f44a7c331f0a3bd4ae934ae5923fdc834cb8e5f990283e"
+        ],
+        "status": "SUCCESS",
+        "segments": null,
+        "block": {
+          "height": 588705,
+          "hash": "950f5bac287b39c1572ad42ebd069f70f016aa4db3f2df96dc49a38d45e884de",
+          "timestamp": "2026-09-23T14:17:06.000Z"
+        },
+        "bytes": 21026,
+        "rawSha256": "65656150ece3f1d0673f543eeca2cdadd8bac52cb84a6b5ddfe62a1c4e21a45a",
+        "rawFile": "transactions/65656150ece3f1d0673f543eeca2cdadd8bac52cb84a6b5ddfe62a1c4e21a45a.hex",
+        "contractActions": [
+          {
+            "__typename": "ContractCall",
+            "address": "6240fbd956523c6f9a2feb78c0e72e63fba53a03486c5deac8c346ce51d23436",
+            "entryPoint": "emitPart"
+          },
+          {
+            "__typename": "ContractCall",
+            "address": "6240fbd956523c6f9a2feb78c0e72e63fba53a03486c5deac8c346ce51d23436",
+            "entryPoint": "emitPart"
+          },
+          {
+            "__typename": "ContractCall",
+            "address": "6240fbd956523c6f9a2feb78c0e72e63fba53a03486c5deac8c346ce51d23436",
+            "entryPoint": "emitPart"
+          }
+        ],
+        "fees": {
+          "requiredSpeck": "280145125128434",
+          "requiredDust": "0.280145125128434",
+          "estimatedSpeck": "280145125128434",
+          "declaredDustSpendSpeck": "24088064622394300",
+          "declaredDustSpendDust": "24.088064622394300",
+          "note": "required = indexer fees.paidFees; declared = the DUST spend's vFee the wallet declared (and the ledger consumed), see Q28"
+        },
+        "node": {
+          "chain_getBlock": "https://rpc.stagenet.shielded.tools",
+          "rawBytesFoundInBlock": true,
+          "extrinsicIndex": 3
+        },
+        "finality": {
+          "finalizedHead": {
+            "number": 588707,
+            "hash": "bd38e38a397394872a0ff4df15fc8e908fa7ad7784183a0d9e72a78a772eed11"
+          },
+          "finalized": true,
+          "observedAt": "2026-09-23T14:17:34.792Z"
+        },
+        "events": {
+          "file": "events/65656150ece3f1d0673f543eeca2cdadd8bac52cb84a6b5ddfe62a1c4e21a45a.json",
+          "contract": "6240fbd956523c6f9a2feb78c0e72e63fba53a03486c5deac8c346ce51d23436",
+          "count": 3,
+          "ids": [
+            43026,
+            43027,
+            43028
+          ]
+        }
+      },
+      "timingsSeconds": {
+        "walletSyncRestored": 15.1,
+        "build": 1.0,
+        "finalize(prove+balance)": 20.5,
+        "proveRequestsSeconds (emitPart proofs, then the DUST-spend proof)": [
+          8.52,
+          6.71,
+          9.51,
+          0.28
+        ],
+        "submitReturnedAfter": 15.6,
+        "indexerSawItAfterSubmitReturn": 1.1,
+        "clock": "host clock; chain block timestamps run ~14 s behind"
+      },
+      "cliLog": "logs/publish-m3.log",
+      "verification": {
+        "command": "cmse verify --contract 6240fbd956523c6f9a2feb78c0e72e63fba53a03486c5deac8c346ce51d23436 --tx 65656150ece3f1d0673f543eeca2cdadd8bac52cb84a6b5ddfe62a1c4e21a45a --level 3 --node https://rpc.stagenet.shielded.tools",
+        "levelReached": 3,
+        "requestedLevel": 3,
+        "exitStatus": 0,
+        "log": "verify/m3.log",
+        "report": "verify/m3.json",
+        "offline": {
+          "command": null,
+          "log": null
+        }
+      }
+    },
+    {
+      "label": "Consumer M1",
+      "kind": "consumer",
+      "contract": "cf12a32260fd443d0c1d6fce6316bd420fe850a278076e872834e35016c8d7ef",
+      "message": {
+        "file": "messages/m1.hex",
+        "bytes": 417,
+        "sha256": "89e144de0b0f2da569b4f34ff1ef2278d5edc22397bcbf78728b427170589d92"
+      },
+      "parts": 3,
+      "requestId": "fcde97e961102a0617cdf6d4628d58d425326b6ff634585e130c9a2509da071b",
+      "requestIdEqualsGoldenVector": true,
+      "segment": 33198,
+      "intentHash": "c301725844404a417c80d56c8362e3e3200e67600020e77817cd54079682160b",
+      "pinnedBlock": {
+        "height": 588794,
+        "hash": "b0b40f76f18044bb269d17552d9e972c9d5d48d5171051b965958c3716320f13"
+      },
+      "ttl": "2026-09-23T14:46:18.000Z",
+      "finalizedRecord": "publications/consumer-m1.json",
+      "savedFinalizedBytesEqualOnChain": true,
+      "mergedByOthers": false,
+      "cliVerifiedFromRawBytes": true,
+      "normalizedCostLive": {
+        "readTime": 0.0038675,
+        "computeTime": 0.010550275718,
+        "blockUsage": 0.021098,
+        "bytesWritten": 0.0064,
+        "bytesChurned": 0.000552
+      },
+      "transaction": {
+        "hash": "7eab20e01e9a1cec3c44fa145282ff6eab409a115c485e46ddec3b48099e9de4",
+        "identifiers": [
+          "001b259b95c27953833bbbf9a24ae8921d4caaf34c542dda33e2d84e6ef8df1c8c",
+          "00739b6780eb0ada081a5bc31629b8824d34e26ababc14639ec02fb8aa14d0d9e8"
+        ],
+        "status": "SUCCESS",
+        "segments": null,
+        "block": {
+          "height": 588802,
+          "hash": "8f2ce36ff6e7c578a974a10b7eac9f32b91b4ba6aefbe573d731416b6a83f903",
+          "timestamp": "2026-09-23T14:27:06.000Z"
+        },
+        "bytes": 21166,
+        "rawSha256": "7eab20e01e9a1cec3c44fa145282ff6eab409a115c485e46ddec3b48099e9de4",
+        "rawFile": "transactions/7eab20e01e9a1cec3c44fa145282ff6eab409a115c485e46ddec3b48099e9de4.hex",
+        "contractActions": [
+          {
+            "__typename": "ContractCall",
+            "address": "cf12a32260fd443d0c1d6fce6316bd420fe850a278076e872834e35016c8d7ef",
+            "entryPoint": "emitPart"
+          },
+          {
+            "__typename": "ContractCall",
+            "address": "cf12a32260fd443d0c1d6fce6316bd420fe850a278076e872834e35016c8d7ef",
+            "entryPoint": "emitPart"
+          },
+          {
+            "__typename": "ContractCall",
+            "address": "cf12a32260fd443d0c1d6fce6316bd420fe850a278076e872834e35016c8d7ef",
+            "entryPoint": "emitPart"
+          }
+        ],
+        "fees": {
+          "requiredSpeck": "279567638850321",
+          "requiredDust": "0.279567638850321",
+          "estimatedSpeck": "279567638850321",
+          "declaredDustSpendSpeck": "24051220166270810",
+          "declaredDustSpendDust": "24.051220166270810",
+          "note": "required = indexer fees.paidFees; declared = the DUST spend's vFee the wallet declared (and the ledger consumed), see Q28"
+        },
+        "node": {
+          "chain_getBlock": "https://rpc.stagenet.shielded.tools",
+          "rawBytesFoundInBlock": true,
+          "extrinsicIndex": 3
+        },
+        "finality": {
+          "finalizedHead": {
+            "number": 588804,
+            "hash": "9ce9730a1c7fe5984fe6dfd4da64a17474c96d8528a092b7255cafc8d926c9d9"
+          },
+          "finalized": true,
+          "observedAt": "2026-09-23T14:27:33.304Z"
+        },
+        "events": {
+          "file": "events/7eab20e01e9a1cec3c44fa145282ff6eab409a115c485e46ddec3b48099e9de4.json",
+          "contract": "cf12a32260fd443d0c1d6fce6316bd420fe850a278076e872834e35016c8d7ef",
+          "count": 3,
+          "ids": [
+            43034,
+            43035,
+            43036
+          ]
+        }
+      },
+      "timingsSeconds": {
+        "walletSyncRestored": 15.1,
+        "build": 1.1,
+        "finalize(prove+balance)": 23.5,
+        "proveRequestsSeconds (emitPart proofs, then the DUST-spend proof)": [
+          10.97,
+          9.52,
+          11.7,
+          0.31
+        ],
+        "submitReturnedAfter": 18.1,
+        "indexerSawItAfterSubmitReturn": 1.1,
+        "clock": "host clock; chain block timestamps run ~14 s behind"
+      },
+      "cliLog": "logs/publish-consumer-m1.log",
+      "verification": {
+        "command": "cmse verify --kind consumer --contract cf12a32260fd443d0c1d6fce6316bd420fe850a278076e872834e35016c8d7ef --tx 7eab20e01e9a1cec3c44fa145282ff6eab409a115c485e46ddec3b48099e9de4 --level 3 --node https://rpc.stagenet.shielded.tools",
+        "levelReached": 3,
+        "requestedLevel": 3,
+        "exitStatus": 0,
+        "log": "verify/consumer-m1.log",
+        "report": "verify/consumer-m1.json",
+        "offline": {
+          "command": "cmse verify --kind consumer --contract cf12a32260fd443d0c1d6fce6316bd420fe850a278076e872834e35016c8d7ef --raw-file /evidence/transactions/7eab20e01e9a1cec3c44fa145282ff6eab409a115c485e46ddec3b48099e9de4.hex --tx 7eab20e01e9a1cec3c44fa145282ff6eab409a115c485e46ddec3b48099e9de4 --status SUCCESS --state-file /evidence/contracts/consumer-state-after-deploy.hex --level 3",
+          "levelReached": 3,
+          "exitStatus": 0,
+          "log": "verify/offline-consumer-m1.log"
+        }
+      }
+    }
+  ],
+  "registration": {
+    "contract": "cf12a32260fd443d0c1d6fce6316bd420fe850a278076e872834e35016c8d7ef",
+    "circuit": "register3",
+    "requestId": "fcde97e961102a0617cdf6d4628d58d425326b6ff634585e130c9a2509da071b",
+    "parts": 3,
+    "ownerCommitment": "106e7d7a274e04437e4592dd06611c826b97ab2b5a5e7ad0e60afe610248bd15",
+    "record": "register-consumer-m1.json",
+    "transaction": {
+      "hash": "806ad115a07d2fc49097b678414ba21b074104e49070b52718f24c4793ee30df",
+      "identifiers": [
+        "008cee54c3b40d96e5349ff99cb0dd872e514dc01f49376193aea8b0df558b2ad1",
+        "0056a3007cbb4e136a362828409e2369198e0b00aa46b9ac8fecb09d3a4a9b1f47"
+      ],
+      "status": "SUCCESS",
+      "segments": null,
+      "block": {
+        "height": 588787,
+        "hash": "2302d90247994be93700f15e87e73a21ec9e28307f1b59bad054afa223f09ceb",
+        "timestamp": "2026-09-23T14:25:36.000Z"
+      },
+      "bytes": 9183,
+      "rawSha256": "806ad115a07d2fc49097b678414ba21b074104e49070b52718f24c4793ee30df",
+      "rawFile": "transactions/806ad115a07d2fc49097b678414ba21b074104e49070b52718f24c4793ee30df.hex",
+      "contractActions": [
+        {
+          "__typename": "ContractCall",
+          "address": "cf12a32260fd443d0c1d6fce6316bd420fe850a278076e872834e35016c8d7ef",
+          "entryPoint": "register3"
+        }
+      ],
+      "fees": {
+        "requiredSpeck": "342949714285715",
+        "requiredDust": "0.342949714285715",
+        "estimatedSpeck": "342949714285715",
+        "declaredDustSpendSpeck": "30291031923876476",
+        "declaredDustSpendDust": "30.291031923876476",
+        "note": "required = indexer fees.paidFees; declared = the DUST spend's vFee the wallet declared (and the ledger consumed), see Q28"
+      },
+      "node": {
+        "chain_getBlock": "https://rpc.stagenet.shielded.tools",
+        "rawBytesFoundInBlock": true,
+        "extrinsicIndex": 4
+      },
+      "finality": {
+        "finalizedHead": {
+          "number": 588789,
+          "hash": "967bdd7fcc7bf9b3232da3e6c939e8d3c80f888dc69fd7f9017f282b2b9bcd26"
+        },
+        "finalized": true,
+        "observedAt": "2026-09-23T14:26:04.328Z"
+      },
+      "events": {
+        "file": "events/806ad115a07d2fc49097b678414ba21b074104e49070b52718f24c4793ee30df.json",
+        "contract": "cf12a32260fd443d0c1d6fce6316bd420fe850a278076e872834e35016c8d7ef",
+        "count": 0,
+        "ids": []
+      }
+    },
+    "note": "its own transaction, 15 blocks before the consumer publication; the CLI checked the public registry entry after inclusion"
+  },
+  "release": {
+    "contract": "cf12a32260fd443d0c1d6fce6316bd420fe850a278076e872834e35016c8d7ef",
+    "circuit": "release",
+    "requestId": "fcde97e961102a0617cdf6d4628d58d425326b6ff634585e130c9a2509da071b",
+    "record": "release-consumer-m1.json",
+    "transaction": {
+      "hash": "dbc5dfffccc6c44e0e577c6cf8fa05743a8e774698d096d8a1eff44e7eb81557",
+      "identifiers": [
+        "00ed49c9ba3fa65dc147d91e31c2ffa2aaac7f687b114f7212686cbcbc14cb1101",
+        "00ab36dce085ce50652dea8eb2dab3302f094167509dcaf934091195e472dfa402"
+      ],
+      "status": "SUCCESS",
+      "segments": null,
+      "block": {
+        "height": 588884,
+        "hash": "518175720a6561e5549bda6e5ea45f21f78771010583bcdedd0f15300b49ec3c",
+        "timestamp": "2026-09-23T14:35:18.001Z"
+      },
+      "bytes": 9236,
+      "rawSha256": "dbc5dfffccc6c44e0e577c6cf8fa05743a8e774698d096d8a1eff44e7eb81557",
+      "rawFile": "transactions/dbc5dfffccc6c44e0e577c6cf8fa05743a8e774698d096d8a1eff44e7eb81557.hex",
+      "contractActions": [
+        {
+          "__typename": "ContractCall",
+          "address": "cf12a32260fd443d0c1d6fce6316bd420fe850a278076e872834e35016c8d7ef",
+          "entryPoint": "release"
+        }
+      ],
+      "fees": {
+        "requiredSpeck": "69488923603120",
+        "requiredDust": "0.069488923603120",
+        "estimatedSpeck": "69488923603120",
+        "declaredDustSpendSpeck": "5851868233789773",
+        "declaredDustSpendDust": "5.851868233789773",
+        "note": "required = indexer fees.paidFees; declared = the DUST spend's vFee the wallet declared (and the ledger consumed), see Q28"
+      },
+      "node": {
+        "chain_getBlock": "https://rpc.stagenet.shielded.tools",
+        "rawBytesFoundInBlock": true,
+        "extrinsicIndex": 3
+      },
+      "finality": {
+        "finalizedHead": {
+          "number": 588886,
+          "hash": "1b90a3ca519205092dc433d43660526d1a833a73988a1e8b47898f09c14e3bfe"
+        },
+        "finalized": true,
+        "observedAt": "2026-09-23T14:35:44.054Z"
+      },
+      "events": {
+        "file": "events/dbc5dfffccc6c44e0e577c6cf8fa05743a8e774698d096d8a1eff44e7eb81557.json",
+        "contract": "cf12a32260fd443d0c1d6fce6316bd420fe850a278076e872834e35016c8d7ef",
+        "count": 0,
+        "ids": []
+      }
+    },
+    "registryHoldsRequestAfter": false
+  },
+  "q26Merge": {
+    "question": "Q26: can intents be added to an already sealed (proven, bound) transaction, and does stagenet accept it?",
+    "answer": "yes: two fee-less sealed publications were merged, the wallet added a fee intent after sealing, and stagenet included the result with status SUCCESS",
+    "record": "q26/merge-sealed-live.json",
+    "dryRuns": [
+      "q26/merge-sealed-dry-run-attempt1-guard.json",
+      "q26/merge-sealed-dry-run-attempt2-validate.json",
+      "q26/merge-sealed-dry-run.json"
+    ],
+    "sealed": {
+      "A": {
+        "message": {
+          "file": "messages/q26-a.hex",
+          "bytes": 300,
+          "sha256": "9b854f0a59eabeac0b0ecaee1f5cd7ab3bfbc93e9b33e2a89ac338b237f300f2"
+        },
+        "parts": 2,
+        "requestId": "6ff74e5a262bd534ef108906bcf59d02b0f8620934906a16353d5e71258e5cdc",
+        "segment": 39372,
+        "sealedTransactionHash": "4a730e93c77c23c2b632e6d0f1e265c1d9fe85d36004fb92e6e5d202871de19f",
+        "identifiers": [
+          "00253e23d279b68eb92a1edfc66abe2088ccb7d5cb7a9057254ac77f907178090c"
+        ],
+        "intentHash": "6268e0e6dc0468c8f973241da0ba4c5a38bfd69be062bd10a57985d7d5b6aafb",
+        "sealedBytes": 12033,
+        "verification": {
+          "command": "cmse verify --contract 6240fbd956523c6f9a2feb78c0e72e63fba53a03486c5deac8c346ce51d23436 --tx 7e8407de37393a2bbeeb005fd744335a5766f5cdcb00210c2d823cf842cd5230 --request-id 6ff74e5a262bd534ef108906bcf59d02b0f8620934906a16353d5e71258e5cdc --level 3 --node https://rpc.stagenet.shielded.tools",
+          "levelReached": 3,
+          "requestedLevel": 3,
+          "exitStatus": 0,
+          "log": "verify/q26-a.log",
+          "report": "verify/q26-a.json",
+          "offline": {
+            "command": null,
+            "log": null
+          }
+        }
+      },
+      "B": {
+        "message": {
+          "file": "messages/q26-b.hex",
+          "bytes": 500,
+          "sha256": "624b71041a80f378248cb36216269f870170f8f0acc3f38529d7ac240a25e7e0"
+        },
+        "parts": 3,
+        "requestId": "d1c7aa4661fb30f33a3a6b9567eb2e5f62b0976b6e4ed73d0b60ba457b53ea4c",
+        "segment": 12946,
+        "sealedTransactionHash": "9dfb5cf84dcf775ed8794441ccf002582686281498063d82a4eec6fb096be628",
+        "identifiers": [
+          "00c306152ed53eda635c62380237edf3eb064cfdb9b214f3e9e519cea744e77a24"
+        ],
+        "intentHash": "ce4d2cada4c40e591f252a9635afba5380d510d340812f4214990bf9d1802068",
+        "sealedBytes": 17915,
+        "verification": {
+          "command": "cmse verify --contract 6240fbd956523c6f9a2feb78c0e72e63fba53a03486c5deac8c346ce51d23436 --tx 7e8407de37393a2bbeeb005fd744335a5766f5cdcb00210c2d823cf842cd5230 --request-id d1c7aa4661fb30f33a3a6b9567eb2e5f62b0976b6e4ed73d0b60ba457b53ea4c --level 3 --node https://rpc.stagenet.shielded.tools",
+          "levelReached": 3,
+          "requestedLevel": 3,
+          "exitStatus": 0,
+          "log": "verify/q26-b.log",
+          "report": "verify/q26-b.json",
+          "offline": {
+            "command": null,
+            "log": null
+          }
+        }
+      }
+    },
+    "mergedWithoutFee": {
+      "transactionHash": "518fac5cf7035ba9994fbb54bd0ad4b9983fa23d0e31a572679777733ef2c78f",
+      "identifiers": [
+        "00253e23d279b68eb92a1edfc66abe2088ccb7d5cb7a9057254ac77f907178090c",
+        "00c306152ed53eda635c62380237edf3eb064cfdb9b214f3e9e519cea744e77a24"
+      ],
+      "segments": [
+        12946,
+        39372
+      ]
+    },
+    "final": {
+      "transactionHash": "7e8407de37393a2bbeeb005fd744335a5766f5cdcb00210c2d823cf842cd5230",
+      "identifiers": [
+        "0003d6eb5aff57cb3fdbd884af154b958fd658e97497ffcb02c018e6201ca9baaf",
+        "00253e23d279b68eb92a1edfc66abe2088ccb7d5cb7a9057254ac77f907178090c",
+        "00c306152ed53eda635c62380237edf3eb064cfdb9b214f3e9e519cea744e77a24"
+      ],
+      "segments": [
+        1,
+        12946,
+        39372
+      ],
+      "bytes": 32951,
+      "normalizedCost": {
+        "readTime": 0.00493,
+        "computeTime": 0.0156634487285,
+        "blockUsage": 0.032883,
+        "bytesWritten": 0.00832,
+        "bytesChurned": 0.0008123200000000001
+      }
+    },
+    "offlineChecks": [
+      {
+        "name": "the two publication intents sit on different segments",
+        "ok": true,
+        "detail": "39372 / 12946"
+      },
+      {
+        "name": "intent hash stable from unproven to sealed (A)",
+        "ok": true
+      },
+      {
+        "name": "intent hash stable from unproven to sealed (B)",
+        "ok": true
+      },
+      {
+        "name": "sealed A carries only its publication intent (no fee intent)",
+        "ok": true,
+        "detail": "39372"
+      },
+      {
+        "name": "sealed B carries only its publication intent (no fee intent)",
+        "ok": true,
+        "detail": "12946"
+      },
+      {
+        "name": "merged transaction holds exactly the two publication segments",
+        "ok": true,
+        "detail": "12946,39372"
+      },
+      {
+        "name": "A's intent is byte-identical after the merge",
+        "ok": true
+      },
+      {
+        "name": "B's intent is byte-identical after the merge",
+        "ok": true
+      },
+      {
+        "name": "merged identifiers include A's and B's",
+        "ok": true
+      },
+      {
+        "name": "composer guard on the merged transaction refuses only for the other same-emitter intent (by design, Q27)",
+        "ok": true,
+        "detail": "PublicationCheckError: after merge: segment 12946 also calls the emitter's emitPart | PublicationCheckError: after merge: segment 39372 also calls the emitter's emitPart"
+      },
+      {
+        "name": "balanceFinalizedTransaction returned a FINALIZED_TRANSACTION recipe",
+        "ok": true,
+        "detail": "FINALIZED_TRANSACTION"
+      },
+      {
+        "name": "the recipe's original transaction is the merged one",
+        "ok": true
+      },
+      {
+        "name": "final transaction = A + B + one fee intent",
+        "ok": true,
+        "detail": "1,12946,39372"
+      },
+      {
+        "name": "A's intent is byte-identical in the final transaction",
+        "ok": true
+      },
+      {
+        "name": "B's intent is byte-identical in the final transaction",
+        "ok": true
+      },
+      {
+        "name": "final identifiers include A's and B's",
+        "ok": true
+      },
+      {
+        "name": "composer guard after balancing: same answer (only the other same-emitter intent is flagged)",
+        "ok": true
+      },
+      {
+        "name": "the final cost fits one block under the live parameters",
+        "ok": true,
+        "detail": "{\"readTime\":0.00493,\"computeTime\":0.0156634487285,\"blockUsage\":0.032883,\"bytesWritten\":0.00832,\"bytesChurned\":0.0008123200000000001}"
+      },
+      {
+        "name": "offline Level 1/2 over the final bytes: both publications complete, guaranteed-only",
+        "ok": true,
+        "detail": "2 complete, issues: "
+      }
+    ],
+    "advisories": [
+      {
+        "name": "facade validateTransaction(merged, no balancing)",
+        "ok": false,
+        "detail": "@midnightntwrk/wallet-sdk-capabilities/validation/validationService/WellFormedError:  <- Error: call to non-existant contract ContractAddress(6240fbd956523c6f9a2feb78c0e72e63fba53a03486c5deac8c346ce51d23436)"
+      },
+      {
+        "name": "facade validateTransaction(final, strict)",
+        "ok": false,
+        "detail": "@midnightntwrk/wallet-sdk-capabilities/validation/validationService/WellFormedError:  <- Error: call to non-existant contract ContractAddress(6240fbd956523c6f9a2feb78c0e72e63fba53a03486c5deac8c346ce51d23436)"
+      }
+    ],
+    "timingsMs": {
+      "buildMs": 1034,
+      "proveMs": 31926,
+      "balanceMs": 752,
+      "submitMs": 20464
+    },
+    "transaction": {
+      "hash": "7e8407de37393a2bbeeb005fd744335a5766f5cdcb00210c2d823cf842cd5230",
+      "identifiers": [
+        "0003d6eb5aff57cb3fdbd884af154b958fd658e97497ffcb02c018e6201ca9baaf",
+        "00253e23d279b68eb92a1edfc66abe2088ccb7d5cb7a9057254ac77f907178090c",
+        "00c306152ed53eda635c62380237edf3eb064cfdb9b214f3e9e519cea744e77a24"
+      ],
+      "status": "SUCCESS",
+      "segments": null,
+      "block": {
+        "height": 588953,
+        "hash": "e8ec7f69e7bcb4f0554a691ea3439c4acc8b2942088effe22b29b7a35e20d83c",
+        "timestamp": "2026-09-23T14:42:12.000Z"
+      },
+      "bytes": 32951,
+      "rawSha256": "7e8407de37393a2bbeeb005fd744335a5766f5cdcb00210c2d823cf842cd5230",
+      "rawFile": "transactions/7e8407de37393a2bbeeb005fd744335a5766f5cdcb00210c2d823cf842cd5230.hex",
+      "contractActions": [
+        {
+          "__typename": "ContractCall",
+          "address": "6240fbd956523c6f9a2feb78c0e72e63fba53a03486c5deac8c346ce51d23436",
+          "entryPoint": "emitPart"
+        },
+        {
+          "__typename": "ContractCall",
+          "address": "6240fbd956523c6f9a2feb78c0e72e63fba53a03486c5deac8c346ce51d23436",
+          "entryPoint": "emitPart"
+        },
+        {
+          "__typename": "ContractCall",
+          "address": "6240fbd956523c6f9a2feb78c0e72e63fba53a03486c5deac8c346ce51d23436",
+          "entryPoint": "emitPart"
+        },
+        {
+          "__typename": "ContractCall",
+          "address": "6240fbd956523c6f9a2feb78c0e72e63fba53a03486c5deac8c346ce51d23436",
+          "entryPoint": "emitPart"
+        },
+        {
+          "__typename": "ContractCall",
+          "address": "6240fbd956523c6f9a2feb78c0e72e63fba53a03486c5deac8c346ce51d23436",
+          "entryPoint": "emitPart"
+        }
+      ],
+      "fees": {
+        "requiredSpeck": "398843912980193",
+        "requiredDust": "0.398843912980193",
+        "estimatedSpeck": "398843912980193",
+        "declaredDustSpendSpeck": "34079401570274309",
+        "declaredDustSpendDust": "34.079401570274309",
+        "note": "required = indexer fees.paidFees; declared = the DUST spend's vFee the wallet declared (and the ledger consumed), see Q28"
+      },
+      "node": {
+        "chain_getBlock": "https://rpc.stagenet.shielded.tools",
+        "rawBytesFoundInBlock": true,
+        "extrinsicIndex": 3
+      },
+      "finality": {
+        "finalizedHead": {
+          "number": 588956,
+          "hash": "92bbd3660b21fff377339cbdd895b433ce9338a9f800fecf9237ec669a75ec32"
+        },
+        "finalized": true,
+        "observedAt": "2026-09-23T14:42:46.812Z"
+      },
+      "events": {
+        "file": "events/7e8407de37393a2bbeeb005fd744335a5766f5cdcb00210c2d823cf842cd5230.json",
+        "contract": "6240fbd956523c6f9a2feb78c0e72e63fba53a03486c5deac8c346ce51d23436",
+        "count": 5,
+        "ids": [
+          43042,
+          43043,
+          43044,
+          43045,
+          43046
+        ]
+      }
+    },
+    "onChainBytesEqualSubmitted": true,
+    "containment": {
+      "a": {
+        "identifiersPresent": true,
+        "intentUnchanged": true,
+        "intentHash": "6268e0e6dc0468c8f973241da0ba4c5a38bfd69be062bd10a57985d7d5b6aafb"
+      },
+      "b": {
+        "identifiersPresent": true,
+        "intentUnchanged": true,
+        "intentHash": "ce4d2cada4c40e591f252a9635afba5380d510d340812f4214990bf9d1802068"
+      }
+    },
+    "locatePublication": {
+      "a": {
+        "contains": false,
+        "merged": false,
+        "reason": "locate: segment 12946 also calls the emitter's emitPart"
+      },
+      "b": {
+        "contains": false,
+        "merged": false,
+        "reason": "locate: segment 39372 also calls the emitter's emitPart"
+      }
+    },
+    "verification": {
+      "command": "cmse verify --contract 6240fbd956523c6f9a2feb78c0e72e63fba53a03486c5deac8c346ce51d23436 --tx 7e8407de37393a2bbeeb005fd744335a5766f5cdcb00210c2d823cf842cd5230 --level 3 --node https://rpc.stagenet.shielded.tools",
+      "levelReached": 3,
+      "requestedLevel": 3,
+      "exitStatus": 0,
+      "log": "verify/q26-merged-both.log",
+      "report": "verify/q26-merged-both.json",
+      "offline": {
+        "command": null,
+        "log": null
+      }
+    },
+    "decisions": [
+      "Q27 (guard refuses same-emitter calls in another intent; by design)"
+    ]
+  },
+  "liveLimit": {
+    "binding": "blockUsage",
+    "computedLiveFitParts": 169,
+    "perDimension": {
+      "readTime": {
+        "perPart": 0.00048450000000000007,
+        "fixed": 0.001955,
+        "fitParts": 2059
+      },
+      "computeTime": {
+        "perPart": 0.002555999818798892,
+        "fixed": 0.0024219150944635726,
+        "fitParts": 390
+      },
+      "blockUsage": {
+        "perPart": 0.005895541968470387,
+        "fixed": 0.0033903608862377588,
+        "fitParts": 169
+      },
+      "bytesWritten": {
+        "perPart": 0,
+        "fixed": 0.0064,
+        "fitParts": null
+      },
+      "bytesChurned": {
+        "perPart": 0.00011016288879420537,
+        "fixed": 0.00022436961227098422,
+        "fitParts": 9075
+      }
+    },
+    "size": {
+      "perPart": 5895.5419684703875,
+      "fixed": 3458.3608862377587,
+      "limitBytes": 1048576,
+      "fitParts": 177
+    },
+    "points": [
+      {
+        "parts": 3,
+        "bytes": 21026,
+        "normalized": {
+          "readTime": 0.0034085,
+          "computeTime": 0.0099957782675,
+          "blockUsage": 0.020958,
+          "bytesWritten": 0.0064,
+          "bytesChurned": 0.000552
+        },
+        "file": "publications/m1.json"
+      },
+      {
+        "parts": 5,
+        "bytes": 32999,
+        "normalized": {
+          "readTime": 0.0043775,
+          "computeTime": 0.0152531070955,
+          "blockUsage": 0.032931,
+          "bytesWritten": 0.0064,
+          "bytesChurned": 0.00077674
+        },
+        "file": "publications/m2.json"
+      },
+      {
+        "parts": 8,
+        "bytes": 50695,
+        "normalized": {
+          "readTime": 0.005831,
+          "computeTime": 0.022925541129,
+          "blockUsage": 0.050627,
+          "bytesWritten": 0.0064,
+          "bytesChurned": 0.00110736
+        },
+        "file": "live-limit/dry-8parts.json"
+      },
+      {
+        "parts": 33,
+        "bytes": 197995,
+        "normalized": {
+          "readTime": 0.0179435,
+          "computeTime": 0.086757225007,
+          "blockUsage": 0.197927,
+          "bytesWritten": 0.0064,
+          "bytesChurned": 0.00385936
+        },
+        "file": "live-limit/dry-33parts.json"
+      }
+    ],
+    "largestSubmittedParts": 5,
+    "largestProvenAndBalancedParts": 33,
+    "dryRuns": {
+      "8 parts": "live-limit/dry-8parts.json",
+      "33 parts": "live-limit/dry-33parts.json"
+    },
+    "note": "33 parts is the one-block fit under LedgerParameters.initialParameters(); stagenet's block_usage limit is 5x larger"
+  },
+  "rejections": {
+    "record": "rejections/local-stages.json",
+    "allPass": true,
+    "submittedAnything": false,
+    "cases": [
+      {
+        "label": "wrong emitter secret",
+        "expectedStage": "execution (local circuit run, before proving)",
+        "observed": "failed assert: EmitterWhitelist: caller is not the emitter authority",
+        "pass": true
+      },
+      {
+        "label": "consumer: unregistered request ID",
+        "expectedStage": "execution (local circuit run, before proving)",
+        "observed": "failed assert: MessageRegistry: request id not registered",
+        "pass": true
+      },
+      {
+        "label": "consumer: registered M1, wrong owner secret",
+        "expectedStage": "execution (local circuit run, before proving)",
+        "observed": "failed assert: MessageRegistry: caller does not own this request id",
+        "pass": true
+      },
+      {
+        "label": "9-part message, default cap 8",
+        "expectedStage": "construction (preflight, before any state read or provider call)",
+        "observed": "publication has 9 parts; the configured limit is 8",
+        "pass": true
+      },
+      {
+        "label": "finalized bytes: one byte flipped in the middle",
+        "expectedStage": "before submission (saved-record re-check)",
+        "observed": "before submission: saved bytes do not match the recorded transaction hash",
+        "pass": true
+      },
+      {
+        "label": "finalized bytes: one byte flipped in the last tail's data",
+        "expectedStage": "before submission (saved-record re-check)",
+        "observed": "before submission: call 3 emits bytes other than part 3",
+        "pass": true
+      },
+      {
+        "label": "record: intent hash altered",
+        "expectedStage": "before submission (saved-record re-check)",
+        "observed": "before submission: saved bytes do not match the recorded intent hash",
+        "pass": true
+      },
+      {
+        "label": "reader: all 3 live M1 events",
+        "expectedStage": null,
+        "observed": [
+          {
+            "status": "complete",
+            "requestId": "fcde97e961102a0617cdf6d4628d58d425326b6ff634585e130c9a2509da071b",
+            "receivedParts": 3,
+            "expectedParts": 3,
+            "issues": []
+          }
+        ],
+        "pass": true
+      },
+      {
+        "label": "reader: live M1 parts 1-2 only",
+        "expectedStage": null,
+        "observed": [
+          {
+            "status": "incomplete",
+            "requestId": "fcde97e961102a0617cdf6d4628d58d425326b6ff634585e130c9a2509da071b",
+            "receivedParts": 2,
+            "expectedParts": 3,
+            "issues": [
+              "missing parts: 3"
+            ]
+          }
+        ],
+        "pass": true
+      },
+      {
+        "label": "reader: live M1 with part 1 duplicated under another event identity",
+        "expectedStage": null,
+        "observed": [
+          {
+            "status": "rejected",
+            "requestId": "fcde97e961102a0617cdf6d4628d58d425326b6ff634585e130c9a2509da071b",
+            "receivedParts": 3,
+            "expectedParts": 3,
+            "issues": [
+              "part 1 was emitted 2 times"
+            ]
+          }
+        ],
+        "pass": true
+      }
+    ],
+    "replay": {
+      "record": "rejections/replay-m3.json",
+      "replayed": "65656150ece3f1d0673f543eeca2cdadd8bac52cb84a6b5ddfe62a1c4e21a45a",
+      "ttl": "2026-09-23T14:36:24.000Z",
+      "attemptedAt": "2026-09-23T14:34:11.068Z",
+      "refused": true,
+      "nodeAnswer": "RpcError: 1012: Transaction is temporarily banned",
+      "indexerCopiesAfter": 1,
+      "note": "the node refused the replay at submission; nothing was included, no fee; this is not a rollback"
+    }
+  },
+  "walletFreeVerification": {
+    "runLog": "verify/run.log",
+    "script": "scripts/p3/verify-all.sh",
+    "environment": "fresh Docker volumes, clean public clone at c4b9b75, no secret mounted, no CMSE_* variable",
+    "negative": {
+      "command": "cmse verify --kind consumer --contract cf12a32260fd443d0c1d6fce6316bd420fe850a278076e872834e35016c8d7ef --tx 79c26aa9153e09494f6db3a765130a0ced6e657d55ac2e72881b6007b0afca5e --level 3",
+      "levelReached": 0,
+      "requestedLevel": 3,
+      "exitStatus": 3,
+      "log": "verify/negative-m1-tx-at-consumer.log",
+      "report": "verify/negative-m1-tx-at-consumer.json",
+      "offline": {
+        "command": null,
+        "log": null
+      }
+    }
+  },
+  "totals": {
+    "transactions": 9,
+    "requiredFeesDust": "12.225352481526368",
+    "declaredDustConsumed": "1085.722334197477906",
+    "feesFile": "fees/declared-dust-fees.json"
+  }
+}

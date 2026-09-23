@@ -1,0 +1,2 @@
+{"probedAt":"2026-09-23T14:03:16Z","rpc":"https://rpc.stagenet.shielded.tools",
+"system_version":{"jsonrpc":"2.0","id":1,"result":"2.0.0-d9729c13"},"system_chain":{"jsonrpc":"2.0","id":1,"result":"Midnight Stagenet"},"midnight_ledgerVersion":{"jsonrpc":"2.0","id":1,"result":"=1.0.0"},"system_health":{"jsonrpc":"2.0","id":1,"result":{"peers":6,"isSyncing":false,"shouldHavePeers":true}},"chain_getFinalizedHead":{"jsonrpc":"2.0","id":1,"result":"0x08ae849e84b14f40b67924a6e1adf5b3ef6c3dc7f844d6b89cd8235b28cba227"},"state_getRuntimeVersion.specVersion":2000000}

@@ -1,0 +1,10 @@
+$ cmse verify --kind consumer --contract cf12a32260fd443d0c1d6fce6316bd420fe850a278076e872834e35016c8d7ef --tx 7eab20e01e9a1cec3c44fa145282ff6eab409a115c485e46ddec3b48099e9de4 --level 3 --node https://rpc.stagenet.shielded.tools
+transaction 7eab20e01e9a1cec3c44fa145282ff6eab409a115c485e46ddec3b48099e9de4 at block 588802, status SUCCESS
+L1 --   3 Misc events from the indexer
+L1 OK   request fcde97e961102a0617cdf6d4628d58d425326b6ff634585e130c9a2509da071b: 3 parts, 417 bytes, message SHA-256 89e144de0b0f2da569b4f34ff1ef2278d5edc22397bcbf78728b427170589d92
+L2 OK   status SUCCESS; 3 guaranteed-only emitPart calls to cf12a32260fd443d0c1d6fce6316bd420fe850a278076e872834e35016c8d7ef in one transaction 7eab20e01e9a1cec3c44fa145282ff6eab409a115c485e46ddec3b48099e9de4
+L2 OK   1 publication(s) match Level 1
+L2 OK   the node's block 588802 holds the raw bytes (extrinsic 3)
+L3 OK   deployed emitPart verifier key equals the repository's (SHA-256 ba84609e5ebb011420f60db12567102b06761a4a1fa71331ec4747a1d1f2e30d)
+verified up to level 3 — and the deployed emission circuit is the one this repository compiles
+exit status 0
