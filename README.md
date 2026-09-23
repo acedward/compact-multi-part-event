@@ -194,7 +194,7 @@ scripts/check.sh --fresh-clone   # the same from a clean clone of the committed 
 `scripts/keys.sh verify all` (regenerates every key and compares the committed hashes),
 `scripts/derive-vectors.sh --check`, Prettier, ESLint, `tsc`, `yarn build`, `yarn test`,
 `yarn check:entrypoints`, `scripts/check-external-consumer.sh` and
-`scripts/check-labels.sh --history`, and ends with `all checks passed`. The real-proof
+`scripts/check-labels.sh --history`, and ends with `all checks passed`. It needs Docker, and network access for the first package install and for the public parameters, which are fetched from `https://srs.midnight.network/` and checked against pinned SHA-256 values (or copied from a local cache named by `CMSE_ZK_PARAMS_DIR`). A warm run takes about 100 s, most of it key regeneration. Remove its Docker volumes with `scripts/docker/teardown.sh`. The real-proof
 tests (`tests/real-proof.test.ts`) are opt-in: start `scripts/docker/proof-server.sh up`
 and set `PROOF_SERVER_URL` and `ZK_ARTIFACTS_DIR`.
 
