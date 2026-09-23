@@ -1,0 +1,9 @@
+{
+  "observedAt": "2026-09-23T15:24:02+00:00",
+  "endpoint": "https://rpc.stagenet.shielded.tools",
+  "system_version": "2.0.0-d9729c13",
+  "system_chain": "Midnight Stagenet",
+  "midnight_ledgerVersion": "=1.0.0",
+  "specVersion": 2000000,
+  "finalizedHead": "0xb08459153deb38af1f7bb348a6227c38b4610f6a3a05684627cb9b56b6377638"
+}

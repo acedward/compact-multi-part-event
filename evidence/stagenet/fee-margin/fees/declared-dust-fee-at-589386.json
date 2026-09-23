@@ -1,0 +1,21 @@
+{
+  "parameters": "/evidence/ledger-parameters/589386.hex",
+  "rows": [
+    {
+      "transaction": "e419439b8bff82bf0ce953f0329dd7afa51c8b8693ffd75216c472ab533bd5cd",
+      "dustSpends": [
+        {
+          "segment": 1,
+          "vFee": "380190172872264"
+        }
+      ],
+      "declaredFeeSpeck": "380190172872264",
+      "declaredFeeDust": "0.380190172872264",
+      "requiredFeeSpeckAtTheseParameters": "317609888350433",
+      "requiredFeeDust": "0.317609888350433",
+      "ratio": 1.1970350635077942
+    }
+  ],
+  "totalDeclaredSpeck": "380190172872264",
+  "totalDeclaredDust": "0.380190172872264"
+}

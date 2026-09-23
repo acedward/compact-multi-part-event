@@ -1,0 +1,63 @@
+{
+  "fetchedAt": "2026-09-23T15:27:37.743Z",
+  "indexer": "https://indexer.stagenet.shielded.tools/api/v4/graphql",
+  "node": "https://rpc.stagenet.shielded.tools",
+  "__typename": "RegularTransaction",
+  "hash": "e419439b8bff82bf0ce953f0329dd7afa51c8b8693ffd75216c472ab533bd5cd",
+  "identifiers": [
+    "00686ef0412c1ba923b53946fa18ce30c1c11abfdceed3430614a33eb91aa689ee",
+    "00cc40f037e9bba9deafea102466729547284139262741d561f0317ea992a9f3b7"
+  ],
+  "fee": "317671583406395",
+  "fees": {
+    "paidFees": "317671583406395",
+    "estimatedFees": "317671583406395"
+  },
+  "transactionResult": {
+    "status": "SUCCESS",
+    "segments": null
+  },
+  "block": {
+    "height": 589396,
+    "hash": "b124ae89fff467a011f15fafb3569789bd4dae1067ed8704ae38e9eb963f9bfc",
+    "timestamp": 1790177190001,
+    "timestampIso": "2026-09-23T15:26:30.001Z"
+  },
+  "contractActions": [
+    {
+      "__typename": "ContractCall",
+      "address": "6240fbd956523c6f9a2feb78c0e72e63fba53a03486c5deac8c346ce51d23436",
+      "entryPoint": "emitPart"
+    },
+    {
+      "__typename": "ContractCall",
+      "address": "6240fbd956523c6f9a2feb78c0e72e63fba53a03486c5deac8c346ce51d23436",
+      "entryPoint": "emitPart"
+    },
+    {
+      "__typename": "ContractCall",
+      "address": "6240fbd956523c6f9a2feb78c0e72e63fba53a03486c5deac8c346ce51d23436",
+      "entryPoint": "emitPart"
+    },
+    {
+      "__typename": "ContractCall",
+      "address": "6240fbd956523c6f9a2feb78c0e72e63fba53a03486c5deac8c346ce51d23436",
+      "entryPoint": "emitPart"
+    }
+  ],
+  "rawBytes": 26932,
+  "rawSha256": "e419439b8bff82bf0ce953f0329dd7afa51c8b8693ffd75216c472ab533bd5cd",
+  "nodeCrossCheck": {
+    "method": "chain_getBlock",
+    "extrinsicIndex": 3,
+    "rawBytesFoundInBlock": true
+  },
+  "finality": {
+    "finalizedHead": {
+      "number": 589405,
+      "hash": "ad98e7eafa494f4fbcf8c68ff1f403bdea4d4946a9af20317ea68f347e01a359"
+    },
+    "finalized": true,
+    "observedAt": "2026-09-23T15:27:37.745Z"
+  }
+}

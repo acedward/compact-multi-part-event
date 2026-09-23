@@ -230,7 +230,9 @@ publication, while `verify` accepts every complete group in it.
 Both contracts are deployed on Midnight stagenet and carry real publications, made on
 2026-09-23 (node 2.0.0-d9729c13, ledger 9.1 rc.3). Anyone can check them with `verify`;
 no wallet is needed. [evidence/stagenet/manifest.json](evidence/stagenet/manifest.json)
-records every transaction, event and message, with the raw bytes next to it.
+records every transaction, event and message, with the raw bytes next to it; M4, made
+later with the CLI's default fee margin, is in
+[evidence/stagenet/fee-margin](evidence/stagenet/fee-margin).
 
 | Contract                      | Address                                                            | Deploy transaction, block                                                  |
 | ----------------------------- | ------------------------------------------------------------------ | -------------------------------------------------------------------------- |
@@ -244,6 +246,7 @@ records every transaction, event and message, with the raw bytes next to it.
 | M3, emitter: M1 again                            | 417 bytes, 3 parts                     | `65656150ece3f1d0673f543eeca2cdadd8bac52cb84a6b5ddfe62a1c4e21a45a`, 588705 | 43026–43028 |
 | A and B, emitter: two sealed publications merged | 300 bytes, 2 parts; 500 bytes, 3 parts | `7e8407de37393a2bbeeb005fd744335a5766f5cdcb00210c2d823cf842cd5230`, 588953 | 43042–43046 |
 | M1, consumer                                     | 417 bytes, 3 parts                     | `7eab20e01e9a1cec3c44fa145282ff6eab409a115c485e46ddec3b48099e9de4`, 588802 | 43034–43036 |
+| M4, emitter, default fee margin                  | 640 bytes, 4 parts                     | `e419439b8bff82bf0ce953f0329dd7afa51c8b8693ffd75216c472ab533bd5cd`, 589396 | 43052–43055 |
 
 - M1 and M3 carry the same message and request ID in two transactions: two separate
   publications.
@@ -304,10 +307,18 @@ publication was proven and balanced, not submitted, at 0.198 of a block). Provin
 balancing took 20–32 s, and inclusion about 16 s more. The required fee was about 0.28
 DUST for 3 parts, 0.35 DUST for 5 parts, 1.46 DUST for the emitter's deploy and 8.8 DUST
 for the consumer's (7 verifier keys). The wallet pays more than the required fee: it
-declares a fee that still covers a price rise over `feeBlocksMargin` blocks (prices move
-by up to about 4.6% per block on stagenet), and the ledger consumes the declared amount.
-The live run used a margin of 100 blocks, about ×89: 24 DUST consumed for the 0.28 DUST
-publication.
+declares a fee that still covers a price rise over a margin of blocks (prices move by up
+to about 4.6% per block on stagenet), and the ledger consumes the declared amount. The
+CLI's margin is 5 blocks by default, about ×1.25 (`--fee-blocks-margin`,
+`CMSE_FEE_BLOCKS_MARGIN`, 0 to 100); the first live run used 100 blocks, about ×89:
+
+| Publication | Margin             | Required fee | DUST consumed      |
+| ----------- | ------------------ | ------------ | ------------------ |
+| M1, 3 parts | 100 blocks         | 0.279 DUST   | 23.97 DUST (×86)   |
+| M4, 4 parts | 5 blocks (default) | 0.318 DUST   | 0.380 DUST (×1.20) |
+
+The consumed factor is a little below the nominal one because the wallet's estimate of a
+proven publication's base fee is about 4% below the ledger's required fee.
 
 ## How to test
 

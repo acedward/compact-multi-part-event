@@ -1,0 +1,119 @@
+{
+  "label": "M4, emitter, default fee margin",
+  "task": "S1.10 (Q28 follow-up): the CLI's default wallet fee margin, 5 blocks, on stagenet",
+  "network": "stagenet",
+  "node": "2.0.0-d9729c13",
+  "sourceCommit": "fd1bedc (Wallet fee margin: configurable, default 5 blocks)",
+  "command": "cmse publish --contract <emitter> --message-hex <message-len-640.hex> --emitter-secret-file <path> --wallet-mnemonic-file <path> --wallet-cache-file <path> --proof-server http://127.0.0.1:6300 --record-out publication.json --json (no --fee-blocks-margin, no CMSE_* variable: default 5)",
+  "feeBlocksMargin": 5,
+  "emitter": "6240fbd956523c6f9a2feb78c0e72e63fba53a03486c5deac8c346ce51d23436",
+  "message": {
+    "vector": "len-640",
+    "bytes": 640,
+    "parts": 4,
+    "sha256": "8a6fca9f486d614f0216df34e32a24d8693838dac26cd7c14af8133868b1ecfc",
+    "requestId": "a936c3f0bce660fb693e15972c18cf1d5da2e6283b6c28bc0dcd11cffd2cc1e7",
+    "hexFile": "message-len-640.hex"
+  },
+  "transaction": {
+    "hash": "e419439b8bff82bf0ce953f0329dd7afa51c8b8693ffd75216c472ab533bd5cd",
+    "identifiers": [
+      "00686ef0412c1ba923b53946fa18ce30c1c11abfdceed3430614a33eb91aa689ee",
+      "00cc40f037e9bba9deafea102466729547284139262741d561f0317ea992a9f3b7"
+    ],
+    "segment": 42592,
+    "intentHash": "74d15ba500c8cb094fcb5152612fd068caefe5ff4c7a9dcf289c1f23054a155a",
+    "pinnedBlock": {
+      "height": 589386,
+      "hash": "24c0ac7f358b8c37eb28fe44949ea885727c5629dd45a4afdff082706b9952ae"
+    },
+    "block": {
+      "height": 589396,
+      "hash": "b124ae89fff467a011f15fafb3569789bd4dae1067ed8704ae38e9eb963f9bfc",
+      "timestamp": "2026-09-23T15:26:30.001Z"
+    },
+    "status": "SUCCESS",
+    "merged": false,
+    "bytes": 26932,
+    "normalizedCost": {
+      "readTime": 0.003893,
+      "computeTime": 0.0125608880925,
+      "blockUsage": 0.026864,
+      "bytesWritten": 0.0064,
+      "bytesChurned": 0.00066244
+    },
+    "nodeCrossCheck": {
+      "method": "chain_getBlock",
+      "extrinsicIndex": 3,
+      "rawBytesFoundInBlock": true
+    },
+    "finality": {
+      "finalizedHead": {
+        "number": 589405,
+        "hash": "ad98e7eafa494f4fbcf8c68ff1f403bdea4d4946a9af20317ea68f347e01a359"
+      },
+      "finalized": true,
+      "observedAt": "2026-09-23T15:27:37.745Z"
+    },
+    "eventIds": [
+      43052,
+      43053,
+      43054,
+      43055
+    ]
+  },
+  "fees": {
+    "requiredSpeck": "317671583406395",
+    "requiredDust": "0.317671583406395",
+    "requiredSource": "indexer fees.paidFees (= the ledger fee under block 589395's parameters)",
+    "declaredSpeck": "380190172872264",
+    "declaredDust": "0.380190172872264",
+    "declaredSource": "the transaction's DUST spend vFee (scripts/p3/dust-fees.mjs over the raw bytes); the ledger consumes the declared fee (P3 balance check)",
+    "ratioDeclaredToRequired": 1.1968,
+    "maxPriceAdjustment": 1.0459511985013459,
+    "theoreticalFactor": 1.2519,
+    "note": "the wallet's base fee estimate for this proven 4-call publication is about 4% below the ledger's required fee, so 5 blocks of margin gave x1.197 (about 4 blocks of maximal price rise) instead of x1.252; P3's 100-block run shows the same offset (3-part publications x85.9 instead of x89.3, the deploy exactly x89.3)",
+    "requiredUnderParametersOf": {
+      "589386": {
+        "requiredDust": "0.317609888350433",
+        "ratio": 1.197
+      },
+      "589395": {
+        "requiredDust": "0.317671583406395",
+        "ratio": 1.1968
+      },
+      "589396": {
+        "requiredDust": "0.318729034323987",
+        "ratio": 1.1928
+      }
+    }
+  },
+  "comparisonMargin100": {
+    "source": "../fees/declared-dust-fees.json (P3)",
+    "rows": [
+      {
+        "label": "M1, 3 parts",
+        "transaction": "79c26aa9153e09494f6db3a765130a0ced6e657d55ac2e72881b6007b0afca5e",
+        "declaredDust": "23.971404719836773",
+        "requiredDust": "0.278662857142858"
+      },
+      {
+        "label": "M2, 5 parts",
+        "transaction": "87b04195c1e2812d2060aee1c879e64cd9b1ae98bc62443f774799b64ed6db65",
+        "declaredDust": "30.055028079534893",
+        "requiredDust": "0.353289540372546"
+      }
+    ]
+  },
+  "timingsHost": {
+    "restoredSync": "15 s",
+    "build": "0.9 s",
+    "finalize": "33.2 s (4 emitPart proofs + DUST spend)",
+    "submitToReturn": "21.3 s",
+    "indexerAfterReturn": "1.3 s"
+  },
+  "verification": {
+    "online": "verify/m4.log (level 3 with --node, exit 0)",
+    "offline": "verify/m4-offline.log (saved raw bytes, --network none, level 3, exit 0)"
+  }
+}
