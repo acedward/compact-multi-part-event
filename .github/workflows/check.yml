@@ -1,0 +1,27 @@
+name: check
+
+# The same secret-free sequence as `scripts/check.sh`, in Docker: install, compile,
+# key regeneration against the committed hashes, vectors, lint, types, build, tests,
+# entry points, external consumer and the label policy over the full history.
+# No wallet, network account or live transaction is used.
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  check:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Secret-free checks
+        run: scripts/check.sh
