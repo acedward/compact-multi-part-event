@@ -1,0 +1,12 @@
+node_modules/
+dist/
+build/
+.cache/
+.yarn/
+contracts/managed/
+tests/contracts/managed/
+contracts/keys/
+evidence/
+vectors/v1.json
+yarn.lock
+*.compact

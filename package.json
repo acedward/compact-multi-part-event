@@ -1,0 +1,71 @@
+{
+  "name": "compact-multi-segment-emit",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Publish one runtime-sized message as several Compact Misc events emitted by repeated guaranteed calls in one Midnight transaction, with an independent reader and raw-transaction verifier.",
+  "license": "UNLICENSED",
+  "type": "module",
+  "packageManager": "yarn@4.17.1",
+  "engines": {
+    "node": ">=24.21.0 <25"
+  },
+  "exports": {
+    "./codec": {
+      "types": "./dist/codec/index.d.ts",
+      "default": "./dist/codec/index.js"
+    },
+    "./codec/raw-transaction": {
+      "types": "./dist/codec/raw-transaction.d.ts",
+      "default": "./dist/codec/raw-transaction.js"
+    },
+    "./transaction": {
+      "types": "./dist/transaction/index.d.ts",
+      "default": "./dist/transaction/index.js"
+    },
+    "./contract": {
+      "types": "./dist/contract/index.d.ts",
+      "default": "./dist/contract/index.js"
+    }
+  },
+  "files": [
+    "dist",
+    "contracts/modules",
+    "contracts/emitter.compact",
+    "contracts/keys"
+  ],
+  "scripts": {
+    "compile": "scripts/compile-contracts.sh",
+    "compile:zk": "scripts/compile-contracts.sh --zk",
+    "measure": "scripts/measure-circuits.sh",
+    "build": "tsc -p tsconfig.build.json",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "lint": "eslint . --max-warnings=0",
+    "format": "prettier --write .",
+    "format:check": "prettier --check .",
+    "labels": "scripts/check-labels.sh",
+    "test": "vitest run",
+    "test:real-proof": "vitest run tests/real-proof.test.ts"
+  },
+  "dependencies": {
+    "@midnight-ntwrk/compact-runtime": "0.19.0",
+    "@midnightntwrk/ledger-v9": "1.0.0-rc.3"
+  },
+  "devDependencies": {
+    "@eslint/js": "10.0.1",
+    "@midnight-ntwrk/midnight-js-http-client-proof-provider": "5.0.0-beta.6",
+    "@midnight-ntwrk/midnight-js-node-zk-config-provider": "5.0.0-beta.6",
+    "@midnight-ntwrk/midnight-js-types": "5.0.0-beta.6",
+    "@types/node": "24.13.6",
+    "eslint": "10.8.0",
+    "eslint-config-prettier": "10.1.8",
+    "prettier": "3.9.6",
+    "typescript": "6.0.3",
+    "typescript-eslint": "8.66.0",
+    "vite": "8.2.2",
+    "vitest": "5.0.0"
+  },
+  "resolutions": {
+    "@midnightntwrk/ledger-v9": "1.0.0-rc.3",
+    "@midnightntwrk/onchain-runtime-v4": "4.0.0-rc.3"
+  }
+}

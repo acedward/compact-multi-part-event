@@ -1,0 +1,31 @@
+# Dependencies and package-manager state
+node_modules/
+.yarn/*
+!.yarn/patches
+.pnp.*
+
+# Build output
+dist/
+build/
+*.tsbuildinfo
+coverage/
+
+# Compiler output. Regenerate with `yarn compile` (skip-zk) or `yarn compile:zk`.
+# Verifier keys and their hashes are committed separately under contracts/keys/.
+contracts/managed/
+tests/contracts/managed/
+
+# Downloaded toolchains and caches
+.cache/
+
+# Runtime secrets and local configuration: never commit
+.env
+.env.*
+!.env.example
+*.secret
+*.mnemonic
+
+# Editor and OS clutter
+.DS_Store
+.idea/
+.vscode/
