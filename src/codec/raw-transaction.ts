@@ -217,7 +217,10 @@ export interface VerifyOptions extends EmissionTarget {
   readonly network: string;
   /** Inclusion status reported by the chain source. */
   readonly status: string;
-  /** Transaction hash reported by the chain source; must equal the bytes' hash. */
+  /**
+   * Transaction hash reported by the chain source. It must equal the bytes' hash; it
+   * is also the grouping scope when the bytes carry no hash (erased test transactions).
+   */
   readonly transactionHash?: string;
   readonly limits?: ReaderLimits;
 }
@@ -239,11 +242,12 @@ const DESERIALIZE_MARKERS = [
   ["signature", "no-proof", "no-binding"],
   ["signature", "proof", "pre-binding"],
   ["signature", "pre-proof", "pre-binding"],
+  ["signature", "pre-proof", "binding"],
 ] as const;
 
 /**
- * Deserialize raw transaction bytes (finalized first, then erased, unbound and
- * unproven forms).
+ * Deserialize raw transaction bytes: finalized first, then erased, unbound,
+ * unproven, and unproven-but-bound forms.
  *
  * @throws {Error} If no form matches.
  */
@@ -259,6 +263,18 @@ export const deserializeTransaction = (raw: Uint8Array): AnyTransaction => {
 };
 
 /**
+ * The ledger transaction hash, or `undefined` for transactions that are not proven,
+ * signed and bound (ledger-v9 computes the hash only for those).
+ */
+export const transactionHashOf = (tx: AnyTransaction): string | undefined => {
+  try {
+    return tx.transactionHash();
+  } catch {
+    return undefined;
+  }
+};
+
+/**
  * Verify one included transaction without wallet or publisher data: extract the
  * target's emissions, check placement and feed them to the strict reader.
  *
@@ -270,13 +286,21 @@ export const verifyPublicationTransaction = (
   options: VerifyOptions,
 ): VerificationReport => {
   const tx = input instanceof Uint8Array ? deserializeTransaction(input) : input;
-  const transactionHash = tx.transactionHash();
   const issues: string[] = [];
+  const ownHash = transactionHashOf(tx);
+  const transactionHash = ownHash ?? options.transactionHash ?? "";
+  if (transactionHash.length === 0) {
+    issues.push("no transaction hash: the bytes are not proven and bound, and none was reported");
+  }
+  if (
+    ownHash !== undefined &&
+    options.transactionHash !== undefined &&
+    options.transactionHash !== ownHash
+  ) {
+    issues.push("reported transaction hash differs from the bytes' hash");
+  }
   if (!INCLUDED_STATUSES.includes(options.status)) {
     issues.push(`status ${options.status} is not an inclusion (SUCCESS or PARTIAL_SUCCESS)`);
-  }
-  if (options.transactionHash !== undefined && options.transactionHash !== transactionHash) {
-    issues.push("reported transaction hash differs from the bytes' hash");
   }
   const extraction = extractEmissions(tx, options);
   issues.push(...extraction.transactionIssues);
