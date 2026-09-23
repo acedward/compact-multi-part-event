@@ -81,7 +81,7 @@ Network (flag or environment variable; defaults are stagenet's public endpoints)
   --network CMSE_NETWORK (stagenet)   --indexer CMSE_INDEXER_URL   --indexer-ws CMSE_INDEXER_WS_URL
   --node CMSE_NODE_URL                --proof-server CMSE_PROOF_SERVER_URL (loopback only, unless
   --allow-remote-prover)              --proof-concurrency CMSE_PROOF_CONCURRENCY (4)
-  --zk-dir CMSE_ZK_DIR (build/zk/<contract>, from yarn compile:zk)
+  --zk-dir CMSE_ZK_DIR (build/zk/<contract>, from npm run compile:zk)
 Secrets (paths only; files are mode 0600, outside every Git working tree):
   --wallet-mnemonic-file CMSE_WALLET_MNEMONIC_FILE   --emitter-secret-file CMSE_EMITTER_SECRET_FILE
   --owner-secret-file CMSE_OWNER_SECRET_FILE         --maintenance-key-file CMSE_MAINTENANCE_KEY_FILE

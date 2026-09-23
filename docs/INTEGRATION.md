@@ -11,10 +11,12 @@ This is the procedure for a contract that is not the reference emitter. You need
 | `compact-multi-segment-emit/contract`              | off-chain commitments and witnesses of the two access-control examples            | Node `crypto` only         |
 | `compact-multi-segment-emit/adapters`              | indexer, proof server, wallet, zk artifacts, protected secret files               | the Midnight SDK packages  |
 
-The package is not on npm. Build it (`yarn build`) and depend on `yarn pack`'s tarball,
-as `scripts/check-external-consumer.sh` does, and copy the three `resolutions` of
+The package is not published to the npm registry. Build it (`npm run build`), pack it
+(`npm pack`) and depend on the tarball, as `scripts/check-external-consumer.sh` does, and
+copy the three `overrides` of
 [examples/consumer/package.json](../examples/consumer/package.json) into your project so
-one ledger-v9 and one compact-runtime are loaded.
+one ledger-v9, one compact-runtime and one onchain-runtime-v4 are installed
+(`node scripts/check-pins.mjs <your project directory>` checks it after `npm install`).
 
 ## The two invariants
 
@@ -73,8 +75,8 @@ can remove every circuit and install new ones.
 ## Step 2: build and keys
 
 ```sh
-yarn compile       # compactc 0.34.0 --feature-zkir-v3 --skip-zk
-yarn compile:zk    # full keys into build/zk/<name>
+npm run compile       # compactc 0.34.0 --feature-zkir-v3 --skip-zk
+npm run compile:zk    # full keys into build/zk/<name>
 ```
 
 Commit the small verifier keys with the `SHA256SUMS` of every artifact and regenerate
@@ -181,7 +183,7 @@ shows all of it, and its offline demo runs the flow on a local ledger.
 ## Step 4: what your consumers run
 
 ```sh
-yarn cmse verify --contract <address> --tx <hash> --kind consumer --node <node rpc>
+npm run cmse -- verify --contract <address> --tx <hash> --kind consumer --node <node rpc>
 ```
 
 or, from code, `verifyPublicationTransaction(rawBytes, { emitter, entryPoint, network,

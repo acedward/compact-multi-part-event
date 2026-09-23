@@ -2,7 +2,6 @@ node_modules/
 dist/
 build/
 .cache/
-.yarn/
 contracts/managed/
 tests/contracts/managed/
 examples/consumer/managed/
@@ -10,5 +9,5 @@ examples/consumer/keys/
 contracts/keys/
 evidence/
 vectors/v1.json
-yarn.lock
+package-lock.json
 *.compact

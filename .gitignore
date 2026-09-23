@@ -1,8 +1,5 @@
-# Dependencies and package-manager state
+# Dependencies
 node_modules/
-.yarn/*
-!.yarn/patches
-.pnp.*
 
 # Build output
 dist/
@@ -10,7 +7,7 @@ build/
 *.tsbuildinfo
 coverage/
 
-# Compiler output. Regenerate with `yarn compile` (skip-zk) or `yarn compile:zk`.
+# Compiler output. Regenerate with `npm run compile` (skip-zk) or `npm run compile:zk`.
 # Verifier keys and their hashes are committed separately under contracts/keys/.
 contracts/managed/
 tests/contracts/managed/

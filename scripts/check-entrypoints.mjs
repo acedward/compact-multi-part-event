@@ -1,4 +1,4 @@
-// Import the built codec entry point (`yarn build` first) and record every module
+// Import the built codec entry point (`npm run build` first) and record every module
 // Node resolves while loading it. The codec must reach only Node built-ins and its
 // own files: no ledger, runtime, wallet, network, prover or generated contract code.
 import { registerHooks } from "node:module";

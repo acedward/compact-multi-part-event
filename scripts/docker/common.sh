@@ -8,9 +8,9 @@
 CMSE_REPO_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd -P)"
 CMSE_DOCKER_PREFIX="${CMSE_DOCKER_PREFIX:-cmse}"
 
-# node:24-bookworm-slim, multi-arch index digest (Node v24.21.0, corepack 0.36.0).
+# node:24-bookworm-slim, multi-arch index digest (Node v24.21.0 with its bundled npm 11.19.0,
+# the repository's package manager).
 CMSE_NODE_IMAGE="${CMSE_NODE_IMAGE:-node:24-bookworm-slim@sha256:2fe369e969550cde8e867afc3fe370b260140cab4a23d467074295b42163d553}"
-CMSE_YARN_VERSION="4.17.1"
 
 # Local proof service (opt-in real-proof test, and the proof server the CLI talks to).
 # 9.0.0-rc.6 proves ZKIR v3 and carries the dust/9 keys today's stagenet node expects

@@ -8,8 +8,9 @@
 #                                    (empty package cache: every dependency is installed
 #                                    from the lockfile)
 #
-# Steps: golden-vector derivation (Python), then in the pinned Node image: immutable
-# install, compile, key regeneration against the committed hashes, format, lint,
+# Steps: golden-vector derivation (Python), then in the pinned Node image: `npm ci`
+# from the committed package-lock.json, one copy of each pinned ledger/runtime package,
+# compile, key regeneration against the committed hashes, format, lint,
 # typecheck, build, tests, codec entry point, external consumer; then the label check
 # over the working tree and the full Git history. Docker resources are named
 # ${CMSE_DOCKER_PREFIX}-* (default cmse); remove them with scripts/docker/teardown.sh.

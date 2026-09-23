@@ -2,7 +2,7 @@
  * Zero-knowledge artifact (key) adapter.
  *
  * Proving needs, per circuit, the prover key, verifier key and ZKIR produced by
- * `compactc` (`yarn compile:zk` writes them under `build/zk/<contract>`). The prover
+ * `compactc` (`npm run compile:zk` writes them under `build/zk/<contract>`). The prover
  * resolves a call's key location `contract:<address>/<entryPoint>?vk=<sha256>` by the
  * verifier-key hash, so the local verifier key must equal the deployed one byte for
  * byte. This module checks that before any proof request, and checks artifact hashes
@@ -109,7 +109,7 @@ export interface ZkConfigOptions {
 export const zkConfigForContract = (options: ZkConfigOptions): NodeZkConfigProvider<string> => {
   if (!existsSync(join(options.artifactDir, "keys"))) {
     throw new ArtifactMismatchError(
-      `${options.artifactDir} has no keys/ directory; run the full key build (yarn compile:zk)`,
+      `${options.artifactDir} has no keys/ directory; run the full key build (npm run compile:zk)`,
     );
   }
   if (options.sha256SumsPath !== undefined) {

@@ -9,7 +9,6 @@ export default tseslint.config(
       "dist/",
       "build/",
       ".cache/",
-      ".yarn/",
       "contracts/managed/",
       "tests/contracts/managed/",
       "examples/consumer/managed/",

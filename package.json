@@ -5,7 +5,6 @@
   "description": "Publish one runtime-sized message as several Compact Misc events emitted by repeated guaranteed calls in one Midnight transaction, with an independent reader and raw-transaction verifier.",
   "license": "Apache-2.0",
   "type": "module",
-  "packageManager": "yarn@4.17.1",
   "engines": {
     "node": ">=24.21.0 <25"
   },
@@ -86,7 +85,7 @@
     "vite": "8.2.2",
     "vitest": "5.0.0"
   },
-  "resolutions": {
+  "overrides": {
     "@midnight-ntwrk/compact-runtime": "0.19.0",
     "@midnightntwrk/ledger-v9": "1.0.0-rc.3",
     "@midnightntwrk/onchain-runtime-v4": "4.0.0-rc.3"

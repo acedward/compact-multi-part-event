@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Print circuit size (k, rows, table rows) for every compiled ZKIR v3 circuit with
 # `zkir-v3 mock-compile -v`, which models a circuit without generating keys.
-# Run `yarn compile` first. Values from compactc 0.34.0 are provisional.
+# Run `npm run compile` first. Values from compactc 0.34.0 are provisional.
 # k >= 19 is the documented trigger for evaluating an optimized (MinoCrab) circuit.
 set -euo pipefail
 cd "$(dirname "$0")/.."

@@ -1,8 +1,9 @@
 name: check
 
-# The same secret-free sequence as `scripts/check.sh`, in Docker: install, compile,
-# key regeneration against the committed hashes, vectors, lint, types, build, tests,
-# entry points, external consumer and the label policy over the full history.
+# The same secret-free sequence as `scripts/check.sh`, in Docker: `npm ci` from the
+# committed package-lock.json, single-copy pins, compile, key regeneration against the
+# committed hashes, vectors, lint, types, build, tests, entry points, external consumer
+# and the label policy over the full history.
 # No wallet, network account or live transaction is used.
 
 on:

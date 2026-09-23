@@ -1,5 +1,5 @@
 /**
- * Test access to compiler output. `yarn compile` must have run; production code
+ * Test access to compiler output. `npm run compile` must have run; production code
  * never imports these generated bindings.
  */
 import { readFileSync } from "node:fs";

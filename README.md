@@ -41,19 +41,19 @@ complete second contract that uses the pattern from outside the library.
    the owner can emit its parts. Keep the emission circuit free of state writes: every
    part of a publication is executed from the same pre-state.
 
-2. **Build.** `yarn compile` (Docker: `scripts/docker/run.sh compile 'yarn compile'`)
-   compiles with compactc 0.34.0 and `--feature-zkir-v3`; `yarn compile:zk` also
-   generates the proving keys into `build/zk/`. `yarn build` compiles the library and the `cmse` CLI
-   (`yarn cmse --help`).
+2. **Build.** `npm run compile` (Docker: `scripts/docker/run.sh compile 'npm ci && npm run compile'`)
+   compiles with compactc 0.34.0 and `--feature-zkir-v3`; `npm run compile:zk` also
+   generates the proving keys into `build/zk/`. `npm run build` compiles the library and the `cmse` CLI
+   (`npm run cmse -- --help`).
 
 3. **Deploy and publish.** For the reference emitter, with a funded wallet, a local proof
    server and the variables of [.env.example](.env.example):
 
    ```sh
-   yarn cmse funding --wallet-cache-file ~/cmse/stagenet.wallet-cache.json   # addresses, balances
-   yarn cmse deploy --emitter-secret-file ~/cmse/emitter.secret \
+   npm run cmse -- funding --wallet-cache-file ~/cmse/stagenet.wallet-cache.json   # addresses, balances
+   npm run cmse -- deploy --emitter-secret-file ~/cmse/emitter.secret \
      --maintenance-key-file ~/cmse/maintenance.json --out deploy.json
-   yarn cmse publish --contract <address> --message-file notice.bin \
+   npm run cmse -- publish --contract <address> --message-file notice.bin \
      --emitter-secret-file ~/cmse/emitter.secret --record-out publication.json
    ```
 
@@ -86,10 +86,10 @@ complete second contract that uses the pattern from outside the library.
 
 ## How to verify
 
-`verify` needs no wallet, proof server or compiler: `yarn install && yarn build`, then
+`verify` needs no wallet, proof server or compiler: `npm ci && npm run build`, then
 
 ```sh
-yarn cmse verify --contract <address> --tx <transaction hash> --node https://rpc.stagenet.shielded.tools
+npm run cmse -- verify --contract <address> --tx <transaction hash> --node https://rpc.stagenet.shielded.tools
 ```
 
 It reads from the indexer (default: stagenet's) and stops at the first failing level.
@@ -176,7 +176,7 @@ Evidence manifest: `evidence/stagenet/manifest.json` (`<pending>`). Re-check any
 publication, with no wallet:
 
 ```sh
-yarn cmse verify --contract <address> --tx <publication transaction hash> \
+npm run cmse -- verify --contract <address> --tx <publication transaction hash> \
   --node https://rpc.stagenet.shielded.tools
 ```
 
@@ -210,10 +210,10 @@ scripts/check.sh            # install, compile, keys, lint, types, build, tests,
 scripts/check.sh --fresh-clone   # the same from a clean clone of the committed HEAD
 ```
 
-`scripts/check.sh` runs `yarn install --immutable`, `yarn compile`,
+`scripts/check.sh` runs `npm ci`, `node scripts/check-pins.mjs`, `npm run compile`,
 `scripts/keys.sh verify all` (regenerates every key and compares the committed hashes),
-`scripts/derive-vectors.sh --check`, Prettier, ESLint, `tsc`, `yarn build`, `yarn test`,
-`yarn check:entrypoints`, `scripts/check-external-consumer.sh` and
+`scripts/derive-vectors.sh --check`, Prettier, ESLint, `tsc`, `npm run build`, `npm test`,
+`npm run check:entrypoints`, `scripts/check-external-consumer.sh` and
 `scripts/check-labels.sh --history`, and ends with `all checks passed`. It needs Docker, and network access for the first package install and for the public parameters, which are fetched from `https://srs.midnight.network/` and checked against pinned SHA-256 values (or copied from a local cache named by `CMSE_ZK_PARAMS_DIR`). A warm run takes about 100 s, most of it key regeneration. Remove its Docker volumes with `scripts/docker/teardown.sh`. The real-proof
 tests (`tests/real-proof.test.ts`) are opt-in: start `scripts/docker/proof-server.sh up`
 and set `PROOF_SERVER_URL` and `ZK_ARTIFACTS_DIR`.
@@ -271,8 +271,8 @@ docs/INTEGRATION.md                          adding the pattern to your own cont
 Midnight 2.x, ledger 9. Tested with compactc 0.34.0 (`--feature-zkir-v3`),
 `@midnight-ntwrk/compact-runtime` 0.19.0, `@midnightntwrk/ledger-v9` 1.0.0-rc.3 (the
 ledger of stagenet's node 2.0.0-d9729c13), midnight-js 5.0.0-beta.7, wallet-sdk-facade
-5.0.0-beta.2, proof server 9.0.0-rc.6, the indexer's GraphQL v4 API, Node 24.21.0 and Yarn
-4.17.1. When stagenet moves to ledger 9.1 rc.4 (DUST key version 10), the upgrade is
+5.0.0-beta.2, proof server 9.0.0-rc.6, the indexer's GraphQL v4 API, Node 24.21.0 and npm
+11.19.0. When stagenet moves to ledger 9.1 rc.4 (DUST key version 10), the upgrade is
 midnight-js 5.0.0-beta.8, ledger-v9 1.0.0-rc.4, wallet-sdk-facade 5.0.0-beta.3 and proof
 server 9.0.0-rc.7.
 

@@ -30,7 +30,7 @@ export interface ContractProfile {
   readonly managedDir: string;
   /** Committed verifier keys and their SHA256SUMS. */
   readonly keysDir: string;
-  /** Full key build used for proving (`yarn compile:zk`). */
+  /** Full key build used for proving (`npm run compile:zk`). */
   readonly zkDir: string;
 }
 
@@ -86,7 +86,7 @@ export interface GeneratedModule {
 export const loadGeneratedModule = async (profile: ContractProfile): Promise<GeneratedModule> => {
   const path = join(profile.managedDir, "contract/index.js");
   if (!existsSync(path)) {
-    throw new UsageError(`${path} does not exist; run yarn compile first`);
+    throw new UsageError(`${path} does not exist; run npm run compile first`);
   }
   return (await import(pathToFileURL(path).href)) as GeneratedModule;
 };
@@ -98,7 +98,7 @@ interface ContractInfo {
 /** Names of the contract's provable circuits (from the compiler's contract-info). */
 export const provableCircuits = (profile: ContractProfile): string[] => {
   const path = join(profile.managedDir, "compiler/contract-info.json");
-  if (!existsSync(path)) throw new UsageError(`${path} does not exist; run yarn compile first`);
+  if (!existsSync(path)) throw new UsageError(`${path} does not exist; run npm run compile first`);
   const info = JSON.parse(readFileSync(path, "utf8")) as ContractInfo;
   return info.circuits
     .filter((circuit) => circuit.proof)

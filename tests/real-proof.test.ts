@@ -2,7 +2,7 @@
  * Opt-in end-to-end run with real proofs from a local proof server (ported from the
  * soundness audit, B3 and the merge follow-up). Requires:
  *   PROOF_SERVER_URL   e.g. http://<prefix>-proof-server:6300
- *   ZK_ARTIFACTS_DIR   directory with keys/ and zkir/ for emitPart (yarn compile:zk →
+ *   ZK_ARTIFACTS_DIR   directory with keys/ and zkir/ for emitPart (npm run compile:zk →
  *                      build/zk/emitter); its verifier key must equal the committed one
  * Optional: PROVE_LIMIT_AT=33,34 proves those part counts and reports whether the
  * default cost check accepts them (several minutes each).

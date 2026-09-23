@@ -36,7 +36,7 @@ done
 tar_flags=()
 if tar --version 2>/dev/null | grep -q bsdtar; then tar_flags+=(--no-mac-metadata --no-xattrs); fi
 COPYFILE_DISABLE=1 tar -C "${CMSE_REPO_DIR}" ${tar_flags[@]+"${tar_flags[@]}"} \
-  --exclude=./.git --exclude=./node_modules --exclude=./.cache --exclude=./.yarn \
+  --exclude=./.git --exclude=./node_modules --exclude=./.cache \
   --exclude=./dist --exclude=./build \
   --exclude=./contracts/managed --exclude=./tests/contracts/managed \
   --exclude=./examples/consumer/managed \
@@ -49,7 +49,7 @@ COPYFILE_DISABLE=1 tar -C "${CMSE_REPO_DIR}" ${tar_flags[@]+"${tar_flags[@]}"} \
       for kept in contracts/managed tests/contracts/managed examples/consumer/managed; do
         if [[ -d "${kept}" ]]; then mkdir -p "/work/keep/$(dirname "${kept}")"; mv "${kept}" "/work/keep/${kept}"; fi
       done
-      find . -mindepth 1 -maxdepth 1 ! -name node_modules ! -name .yarn ! -name build ! -name dist \
+      find . -mindepth 1 -maxdepth 1 ! -name node_modules ! -name build ! -name dist \
         -exec rm -rf {} +
       tar -xf -
       find . -name "._*" -delete
@@ -71,15 +71,12 @@ docker run --rm --name "${CMSE_DOCKER_PREFIX}-${suffix}" \
   -v "${CMSE_CACHE_VOLUME}:/cache" \
   -v "${toolchain_dir}:/toolchain:ro" \
   ${extra_args[@]+"${extra_args[@]}"} \
-  -e COREPACK_HOME=/cache/corepack \
-  -e COREPACK_ENABLE_DOWNLOAD_PROMPT=0 \
-  -e YARN_CACHE_FOLDER=/cache/yarn \
-  -e YARN_ENABLE_GLOBAL_CACHE=false \
+  -e NPM_CONFIG_CACHE=/cache/npm \
   -e PATH="/toolchain:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin" \
   ${CMSE_DOCKER_ENV:-} \
   -w /work/repo \
   "${CMSE_NODE_IMAGE}" \
-  bash -c "corepack enable >/dev/null 2>&1 && corepack prepare yarn@${CMSE_YARN_VERSION} --activate >/dev/null 2>&1 && $*"
+  bash -c "$*"
 status=$?
 set -e
 
