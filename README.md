@@ -234,8 +234,7 @@ docs/INTEGRATION.md                          adding the pattern to your own cont
 - The indexer is trusted for events and state; `--node` removes that trust for the raw
   transaction bytes. Run your own indexer to remove the rest.
 - Proof validity is the network's: inclusion on chain means the node verified the proofs.
-  The published ledger-v9 JavaScript package does not verify contract proofs, and no
-  check here claims to.
+  What a message means is up to the contract that emits it.
 
 ## Limitations
 
