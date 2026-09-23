@@ -1,0 +1,17 @@
+compact-multi-segment-emit
+Copyright 2026 the compact-multi-segment-emit authors.
+
+Licensed under the Apache License, Version 2.0 (see LICENSE).
+
+This repository contains no third-party source code. It depends on published
+packages that are installed separately and keep their own licences, notably:
+
+- @midnight-ntwrk/compact-runtime, @midnight-ntwrk/midnight-js-*, @midnightntwrk/ledger-v9
+  and @midnightntwrk/wallet-sdk-* (Midnight Foundation, Apache-2.0)
+- @scure/bip39 (Paul Miller, MIT)
+- rxjs (Google LLC and contributors, Apache-2.0)
+
+The Compact compiler (compactc 0.34.0, LFDT Minokawa) and the Midnight proof server
+image are downloaded by the scripts at build or test time; they are not
+redistributed here.
+

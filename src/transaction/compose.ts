@@ -277,7 +277,8 @@ export const retryUntilNonZeroSegment = <T>(
   throw new Error(`assembly drew segment 0 in all ${String(maxAttempts)} attempts`);
 };
 
-const singleSegment = (tx: ledger.UnprovenTransaction): number => {
+/** The only intent's segment of a freshly assembled transaction. */
+export const singleSegment = (tx: ledger.UnprovenTransaction): number => {
   const segments = [...(tx.intents?.keys() ?? [])];
   const [segment] = segments;
   if (segments.length !== 1 || segment === undefined) {
@@ -286,7 +287,8 @@ const singleSegment = (tx: ledger.UnprovenTransaction): number => {
   return segment;
 };
 
-const ledgerQueryContext = (trace: CallProofData): ledger.QueryContext => {
+/** The ledger query context a call's pre-transcript starts from (with its commitments). */
+export const ledgerQueryContext = (trace: CallProofData): ledger.QueryContext => {
   const state = ledger.StateValue.decode(trace.initialQueryContext.state.state.encode());
   let context = new ledger.QueryContext(
     new ledger.ChargedState(state),
@@ -338,6 +340,31 @@ const checkExecution = (
   }
   if (!bytesEqual(value, expectedValue)) fail("emitted bytes differ from the part");
   return trace;
+};
+
+/**
+ * The native pre-partition call for one executed circuit call.
+ *
+ * @throws {Error} If the contract state has no operation for the circuit.
+ */
+export const prePartitionCallFor = (
+  trace: CallProofData,
+  contractState: ledger.ContractState,
+  keyLocation: string,
+): ledger.PrePartitionContractCall => {
+  const operation = contractState.operation(trace.circuitId);
+  if (operation === undefined) throw new Error(`no operation '${trace.circuitId}'`);
+  return new ledger.PrePartitionContractCall(
+    trace.contractAddress,
+    trace.circuitId,
+    operation,
+    new ledger.PreTranscript(ledgerQueryContext(trace), trace.publicTranscript),
+    trace.privateTranscriptOutputs,
+    trace.input,
+    trace.output,
+    ledger.communicationCommitmentRandomness(),
+    keyLocation,
+  );
 };
 
 /**
@@ -408,21 +435,7 @@ export const buildPublicationTransaction = async <PS>(
   const ttl = new Date((block.timestampSeconds + resolved.ttlSeconds) * 1000);
   const assembled = retryUntilNonZeroSegment(
     () => {
-      const calls = traces.map((trace) => {
-        const operation = ledgerState.operation(trace.circuitId);
-        if (operation === undefined) throw new Error(`no operation '${trace.circuitId}'`);
-        return new ledger.PrePartitionContractCall(
-          trace.contractAddress,
-          trace.circuitId,
-          operation,
-          new ledger.PreTranscript(ledgerQueryContext(trace), trace.publicTranscript),
-          trace.privateTranscriptOutputs,
-          trace.input,
-          trace.output,
-          ledger.communicationCommitmentRandomness(),
-          keyLocation,
-        );
-      });
+      const calls = traces.map((trace) => prePartitionCallFor(trace, ledgerState, keyLocation));
       return ledger.Transaction.fromPartsRandomized(resolved.network).addCalls(
         { tag: "guaranteedOnly" },
         calls,

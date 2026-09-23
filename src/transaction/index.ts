@@ -23,7 +23,9 @@ export {
   DEFAULT_TTL_SECONDS,
   type KeyLocationInput,
   type KeyLocationResolver,
+  ledgerQueryContext,
   type PinnedBlock,
+  prePartitionCallFor,
   preflightPublication,
   type PublicationConfig,
   type PublicationStateSource,
@@ -31,7 +33,27 @@ export {
   resolvePublicationConfig,
   retryUntilNonZeroSegment,
   type SerializableContractState,
+  singleSegment,
 } from "./compose.js";
+export {
+  type BuiltCall,
+  buildCircuitCallTransaction,
+  callIntentCheck,
+  type CircuitCallPlan,
+} from "./call.js";
+export {
+  type BuiltDeploy,
+  buildDeployTransaction,
+  deployIntentCheck,
+  type DeployPlan,
+} from "./deploy.js";
+export {
+  type FinalizedTransactionRecord,
+  finalizeTransaction,
+  type FinalizeTransactionOptions,
+  type IntentCheck,
+  submitSavedTransaction,
+} from "./generic.js";
 export {
   blockFullnessCheck,
   type CostCheck,

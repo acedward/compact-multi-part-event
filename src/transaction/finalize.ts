@@ -25,26 +25,52 @@ import {
   PublicationCheckError,
 } from "./guard.js";
 
-/** Proves every call of the unproven transaction (e.g. a midnight-js `ProofProvider`). */
+/**
+ * Proves every call of the unproven transaction (see `adapters/prover`).
+ *
+ * The seams are function-typed properties, not methods, so TypeScript checks their
+ * parameters strictly: a provider with another payload shape (for example a
+ * version-tagged `{ version, tx }` seam) does not type-check as this interface.
+ */
 export interface PublicationProver {
-  proveTx(
+  readonly proveTx: (
     tx: ledger.UnprovenTransaction,
     config?: { readonly timeout?: number },
-  ): Promise<ledger.Transaction<ledger.SignatureEnabled, ledger.Proof, ledger.PreBinding>>;
+  ) => Promise<ledger.Transaction<ledger.SignatureEnabled, ledger.Proof, ledger.PreBinding>>;
 }
 
-/** Pays fees and binds (e.g. a midnight-js `WalletProvider`). */
+/** Pays fees and binds (see `adapters/wallet`). */
 export interface PublicationBalancer {
-  balanceTx(
+  readonly balanceTx: (
     tx: ledger.Transaction<ledger.SignatureEnabled, ledger.Proof, ledger.PreBinding>,
     ttl?: Date,
-  ): Promise<ledger.FinalizedTransaction>;
+  ) => Promise<ledger.FinalizedTransaction>;
 }
 
-/** Submits a finalized transaction (e.g. a midnight-js `MidnightProvider`). */
+/** Submits a finalized transaction (see `adapters/wallet`). */
 export interface PublicationSubmitter {
-  submitTx(tx: ledger.FinalizedTransaction): Promise<string>;
+  readonly submitTx: (tx: ledger.FinalizedTransaction) => Promise<string>;
 }
+
+/**
+ * Require a provider answer to be a live transaction of this process's ledger-v9
+ * module, so a wrongly wired provider (serialized bytes, a version-tagged object, a
+ * second ledger copy) fails at its stage with a clear message.
+ */
+const requireLedgerTransaction = (value: unknown, stage: string, provider: string): void => {
+  if (!(value instanceof ledger.Transaction)) {
+    const shape =
+      value instanceof Uint8Array
+        ? "serialized bytes"
+        : typeof value === "object" && value !== null && "version" in value
+          ? "a version-tagged payload"
+          : typeof value;
+    throw new PublicationCheckError(
+      stage,
+      `the ${provider} returned ${shape}, not a ledger-v9 transaction of this process; wrap the provider with an adapter`,
+    );
+  }
+};
 
 /** Hook that refuses a transaction whose cost does not fit the pinned parameters. */
 export type CostCheck = (
@@ -161,9 +187,11 @@ export const finalizePublication = async (
   const proven = await providers.prover.proveTx(built.transaction, {
     timeout: options.proofTimeoutMs,
   });
+  requireLedgerTransaction(proven, "after proving", "prover");
   assertPublicationIntent(proven, expected, "after proving", frozenTranscripts);
   costCheck(proven, built.ledgerParameters, "after proving");
   const finalized = await providers.balancer.balanceTx(proven, built.ttl);
+  requireLedgerTransaction(finalized, "after balancing", "balancer");
   assertPublicationIntent(finalized, expected, "after balancing", frozenTranscripts);
   costCheck(finalized, built.ledgerParameters, "after balancing");
   const bytes = finalized.serialize();

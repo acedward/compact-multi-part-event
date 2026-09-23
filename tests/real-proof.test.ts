@@ -14,12 +14,11 @@
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 
-import { httpClientProofProvider } from "@midnight-ntwrk/midnight-js-http-client-proof-provider";
-import { NodeZkConfigProvider } from "@midnight-ntwrk/midnight-js-node-zk-config-provider";
-import { unwrapV9 } from "@midnight-ntwrk/midnight-js-types";
 import * as ledger from "@midnightntwrk/ledger-v9";
 import { describe, expect, it } from "vitest";
 
+import { proofServerProver } from "../src/adapters/prover.js";
+import { zkConfigForContract } from "../src/adapters/zk-config.js";
 import { encodePublication } from "../src/codec/index.js";
 import {
   statusFromLedgerResult,
@@ -57,20 +56,23 @@ const FOREIGN = filled32(0x92);
 type Proven = ledger.Transaction<ledger.SignatureEnabled, ledger.Proof, ledger.PreBinding>;
 
 /**
- * midnight-js 5.0.0-beta.8 providers take version-tagged payloads; the composer's
- * prover seam carries the live v9 ledger object. Wrap it as `{ version: "v9", tx }`
- * and unwrap the v9 arm of the answer (a v8 answer throws).
+ * The repository's prover adapter over midnight-js 5.0.0-beta.7's HTTP proving provider:
+ * at most PROOF_CONCURRENCY (default 4) requests in flight, bounded retries on
+ * 408/429/connection resets, and the answer checked to be a proven ledger-v9
+ * transaction of this process.
  */
-const prover = (): PublicationProver => {
-  const provider = httpClientProofProvider(
-    PROOF_SERVER_URL,
-    new NodeZkConfigProvider(ZK_ARTIFACTS_DIR),
-  );
-  return {
-    proveTx: async (tx, config) =>
-      unwrapV9(await provider.proveTx({ version: "v9", tx }, config), "proveTx"),
-  };
-};
+const prover = (): PublicationProver =>
+  proofServerProver({
+    url: PROOF_SERVER_URL,
+    zkConfig: zkConfigForContract({
+      artifactDir: ZK_ARTIFACTS_DIR,
+      expectedVerifierKeys: { emitPart: EMITTER_VERIFIER_KEY },
+    }),
+    maxConcurrent: Number(process.env.PROOF_CONCURRENCY ?? "4"),
+    onRetry: (event) => {
+      record("prover-retry", { ...event });
+    },
+  });
 
 /** Stand-in wallet: binds without adding a fee intent (no DUST in the local ledger). */
 const binder: PublicationBalancer = { balanceTx: (tx) => Promise.resolve(tx.bind()) };
