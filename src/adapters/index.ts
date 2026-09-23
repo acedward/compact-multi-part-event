@@ -64,6 +64,38 @@ export {
   type WalletSessionOptions,
 } from "./wallet.js";
 export {
+  type CompleteSync,
+  DEFAULT_SYNC_PROGRESS_MS,
+  DEFAULT_SYNC_SAMPLE_MS,
+  DEFAULT_SYNC_STABLE_SAMPLES,
+  DEFAULT_SYNC_TIMEOUT_MS,
+  formatDuration,
+  formatSyncProgress,
+  SUB_WALLETS,
+  type SubWallet,
+  subWalletCaughtUp,
+  type SubWalletProgress,
+  type SyncProgressSource,
+  syncProgressOf,
+  type SyncWaitOptions,
+  waitForCompleteSync,
+  WalletNotSyncedError,
+  type WalletSyncProgress,
+} from "./wallet-sync.js";
+export {
+  loadWalletCache,
+  sameFile,
+  saveWalletCache,
+  WALLET_CACHE_KIND,
+  WALLET_CACHE_SDK,
+  WALLET_CACHE_VERSION,
+  WalletCacheError,
+  type WalletCacheIdentity,
+  type WalletCacheLoad,
+  type WalletCacheOptions,
+  type WalletSnapshots,
+} from "./wallet-cache.js";
+export {
   ArtifactMismatchError,
   assertVerifierKeyEquals,
   checkArtifactHashes,

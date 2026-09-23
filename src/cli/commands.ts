@@ -26,6 +26,7 @@ import type {
   PublicWalletIdentity,
   WalletBalances,
 } from "../adapters/wallet.js";
+import { WalletNotSyncedError } from "../adapters/wallet-sync.js";
 import { bytesEqual, bytesToHex, hexToBytes } from "../codec/bytes.js";
 import { deserializeTransaction, verifyPublicationTransaction } from "../codec/raw-transaction.js";
 import { encodePublication } from "../codec/writer.js";
@@ -146,7 +147,29 @@ export interface FundingReport {
   readonly dustRegistration?: DustRegistrationReport;
 }
 
-/** Print the wallet's public addresses and balances; optionally register NIGHT for DUST. */
+/**
+ * Run a wallet step that needs a complete sync. When the sync does not complete, print
+ * "not synced" with the public progress and fail: no balance is ever printed from an
+ * incomplete sync.
+ */
+const whenSynced = async <T>(step: () => Promise<T>, log: (line: string) => void): Promise<T> => {
+  try {
+    return await step();
+  } catch (error) {
+    if (!(error instanceof WalletNotSyncedError)) throw error;
+    log(`not synced         ${error.detail}; ${error.reason}`);
+    log("                   no balance is shown before the sync is complete; run it again");
+    throw new CommandFailure(
+      "the wallet is not synced, so its balances are unknown (not zero); run `cmse funding` again, with --wallet-cache-file to resume",
+    );
+  }
+};
+
+/**
+ * Print the wallet's public addresses and balances; optionally register NIGHT for DUST.
+ * Balances are printed only after a complete sync; otherwise it prints "not synced"
+ * with the progress and throws {@link CommandFailure}.
+ */
 export const runFunding = async (
   wallet: FundingWallet,
   options: { readonly registerDust?: "estimate" | "register" },
@@ -158,7 +181,7 @@ export const runFunding = async (
   log(`shielded address   ${identity.shieldedAddress}`);
   log(`DUST address       ${identity.dustAddress}`);
   log(`coin public key    ${identity.coinPublicKey}`);
-  const balances = await wallet.balances();
+  const balances = await whenSynced(() => wallet.balances(), log);
   log(
     `NIGHT              ${balances.night.toString()} STAR (${String(balances.nightUtxos.length)} UTxO)`,
   );
@@ -169,7 +192,8 @@ export const runFunding = async (
   }
   log(`DUST               ${balances.dust.toString()} SPECK`);
   if (options.registerDust === undefined) return { identity, balances };
-  const dustRegistration = await wallet.registerForDust(options.registerDust);
+  const registerDust = options.registerDust;
+  const dustRegistration = await whenSynced(() => wallet.registerForDust(registerDust), log);
   log(
     `DUST registration  ${dustRegistration.mode}: ${String(dustRegistration.unregistered)} unregistered UTxO` +
       (dustRegistration.fee === undefined ? "" : `, fee ${dustRegistration.fee.toString()} SPECK`) +

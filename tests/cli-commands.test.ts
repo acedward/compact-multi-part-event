@@ -4,7 +4,10 @@
  * state checked), `publish` (record written before submission, inclusion tracked by
  * identifier, verified from raw bytes), and `verify` through `main()` against a served
  * fake indexer and node: levels 1-3, the node cross-check, not-found, incomplete and
- * key-mismatch outcomes with their exit statuses, and the offline raw-bytes mode.
+ * key-mismatch outcomes with their exit statuses, and the offline raw-bytes mode;
+ * `funding` and the other wallet commands through `main()` with a stand-in wallet: an
+ * incomplete sync prints "not synced" with its progress (never balances) and exits 1,
+ * and the sync timeout and cache flags/environment variables reach the wallet.
  */
 import { mkdtempSync, readFileSync, statSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -13,6 +16,13 @@ import { join } from "node:path";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
 import { readWitnessSecret } from "../src/adapters/secrets.js";
+import {
+  deriveWalletKeys,
+  publicIdentity,
+  type WalletBalances,
+  type WalletSessionOptions,
+} from "../src/adapters/wallet.js";
+import { WalletNotSyncedError } from "../src/adapters/wallet-sync.js";
 import { encodePublication } from "../src/codec/index.js";
 import {
   CommandFailure,
@@ -27,7 +37,7 @@ import {
   type GeneratedModule,
   loadGeneratedModule,
 } from "../src/cli/contracts.js";
-import { main } from "../src/cli/main.js";
+import { type CliWallet, main } from "../src/cli/main.js";
 import { buildPublicationTransaction } from "../src/transaction/index.js";
 import { patternMessage, toHex } from "./helpers/bytes.js";
 import { FakeIndexer } from "./helpers/fake-indexer.js";
@@ -39,7 +49,7 @@ import {
   NETWORK,
   transcriptsAt,
 } from "./helpers/ledger.js";
-import { offlineServices } from "./helpers/offline-services.js";
+import { offlineServices, standInBalancer } from "./helpers/offline-services.js";
 
 const profile = contractProfiles().emitter;
 const secretsDir = mkdtempSync(join(tmpdir(), "cmse-cli-secrets-"));
@@ -364,5 +374,169 @@ describe("usage (main)", () => {
     ]);
     expect(result.status).toBe(2);
     expect(result.err).toContain("would see your witness secrets");
+  });
+});
+
+describe("wallet sync (main, stand-in wallet)", () => {
+  const WORDS = `${"abandon ".repeat(23)}diesel`;
+  const identity = publicIdentity(deriveWalletKeys(WORDS, NETWORK), NETWORK);
+  const notSynced = new WalletNotSyncedError(
+    {
+      shielded: { applied: 1200n, highest: 5000n, connected: true },
+      unshielded: { applied: 3n, highest: 3n, connected: true },
+      dust: { applied: 40_000n, highest: 250_000n, connected: true },
+    },
+    3_600_000,
+    "timed out after 60 min",
+  );
+  const balances: WalletBalances = {
+    night: 5_000_000_000n,
+    dust: 12n,
+    shielded: {},
+    nightUtxos: [],
+  };
+
+  interface StandIn {
+    readonly opened: WalletSessionOptions[];
+    readonly closed: () => boolean;
+    readonly openWallet: (options: WalletSessionOptions) => Promise<CliWallet>;
+  }
+
+  const standIn = (behaviour: {
+    readonly balances?: () => Promise<WalletBalances>;
+    readonly synced?: () => Promise<unknown>;
+  }): StandIn => {
+    const opened: WalletSessionOptions[] = [];
+    let closed = false;
+    const wallet: CliWallet = {
+      identity,
+      balances: behaviour.balances ?? (() => Promise.resolve(balances)),
+      registerForDust: () => Promise.reject(new Error("not used")),
+      synced: behaviour.synced ?? (() => Promise.resolve(undefined)),
+      balancer: () => standInBalancer,
+      submitter: () => ({ submitTx: () => Promise.reject(new Error("not used")) }),
+      coinPublicKey: () => identity.coinPublicKey,
+      close: () => {
+        closed = true;
+        return Promise.resolve();
+      },
+    };
+    return {
+      opened,
+      closed: () => closed,
+      openWallet: (options) => {
+        opened.push(options);
+        return Promise.resolve(wallet);
+      },
+    };
+  };
+
+  const runWith = async (
+    argv: string[],
+    env: Record<string, string>,
+    wallet: StandIn,
+  ): Promise<{ status: number; out: string; err: string }> => {
+    const out: string[] = [];
+    const err: string[] = [];
+    const status = await main(
+      argv,
+      env,
+      { out: (line) => out.push(line), err: (line) => err.push(line) },
+      { openWallet: wallet.openWallet },
+    );
+    return { status, out: out.join("\n"), err: err.join("\n") };
+  };
+
+  const fundingArgs = () => [
+    "funding",
+    "--network",
+    NETWORK,
+    "--indexer",
+    served.indexerUrl,
+    "--node",
+    served.nodeUrl,
+    "--proof-server",
+    "http://127.0.0.1:6300",
+    "--wallet-mnemonic-file",
+    "/nonexistent/wallet.mnemonic",
+  ];
+
+  it("funding prints 'not synced' with the progress instead of balances and exits 1", async () => {
+    const wallet = standIn({ balances: () => Promise.reject(notSynced) });
+    const result = await runWith(
+      [
+        ...fundingArgs(),
+        "--sync-timeout-minutes",
+        "90",
+        "--wallet-cache-file",
+        "/elsewhere/cache.json",
+      ],
+      {},
+      wallet,
+    );
+    expect(result.status).toBe(1);
+    // The public addresses are still printed: they are what a faucet needs.
+    expect(result.out).toContain(`unshielded address ${identity.unshieldedAddress}`);
+    expect(result.out).toContain(
+      "not synced         shielded 1200/5000, unshielded 3/3, dust 40000/250000 (applied/highest index); timed out after 60 min",
+    );
+    expect(result.out).not.toMatch(/^NIGHT /mu);
+    expect(result.out).not.toMatch(/^DUST {15}/mu);
+    expect(result.out).not.toContain("STAR");
+    expect(result.out).not.toContain("SPECK");
+    expect(result.err).toContain(
+      "failed: the wallet is not synced, so its balances are unknown (not zero)",
+    );
+    expect(result.out + result.err).not.toContain("abandon");
+    expect(wallet.closed()).toBe(true);
+    expect(wallet.opened[0]?.syncTimeoutMs).toBe(90 * 60_000);
+    expect(wallet.opened[0]?.stateCacheFile).toBe("/elsewhere/cache.json");
+  });
+
+  it("funding prints balances after a complete sync; timeout and cache also come from CMSE_*", async () => {
+    const withEnv = standIn({});
+    const result = await runWith(
+      fundingArgs(),
+      { CMSE_SYNC_TIMEOUT_MINUTES: "5", CMSE_WALLET_CACHE_FILE: "/elsewhere/env-cache.json" },
+      withEnv,
+    );
+    expect(result.status).toBe(0);
+    expect(result.out).toContain("NIGHT              5000000000 STAR (0 UTxO)");
+    expect(result.out).toContain("DUST               12 SPECK");
+    expect(result.out).not.toContain("not synced");
+    expect(withEnv.opened[0]?.syncTimeoutMs).toBe(5 * 60_000);
+    expect(withEnv.opened[0]?.stateCacheFile).toBe("/elsewhere/env-cache.json");
+
+    const defaults = standIn({});
+    expect((await runWith(fundingArgs(), {}, defaults)).status).toBe(0);
+    expect(defaults.opened[0]?.syncTimeoutMs).toBe(60 * 60_000);
+    expect(defaults.opened[0]).not.toHaveProperty("stateCacheFile");
+  });
+
+  it("refuses a sync timeout outside 1..1440 minutes before opening a wallet", async () => {
+    const wallet = standIn({});
+    const result = await runWith([...fundingArgs(), "--sync-timeout-minutes", "0"], {}, wallet);
+    expect(result.status).toBe(2);
+    expect(result.err).toContain("--sync-timeout-minutes must be an integer from 1 to 1440");
+    expect(wallet.opened).toHaveLength(0);
+  });
+
+  it("every other wallet command stops with 'not synced' (exit 1) and closes the wallet", async () => {
+    const wallet = standIn({ synced: () => Promise.reject(notSynced) });
+    const result = await runWith(
+      [
+        "deploy-consumer",
+        ...fundingArgs().slice(1),
+        "--maintenance-key-file",
+        "/nonexistent/maintenance.json",
+      ],
+      {},
+      wallet,
+    );
+    expect(result.status).toBe(1);
+    expect(result.err).toMatch(
+      /^not synced: wallet not synced after 60 min \(timed out after 60 min\): shielded 1200\/5000/u,
+    );
+    expect(wallet.closed()).toBe(true);
   });
 });

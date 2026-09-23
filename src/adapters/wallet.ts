@@ -14,8 +14,17 @@
  * - DUST registration registers unregistered NIGHT UTxOs; the facade already signs the
  *   registration recipe, so it is finalized without a second signature.
  *
+ * - "Synced" means a COMPLETE sync (see `./wallet-sync`): every sub-wallet (shielded,
+ *   unshielded, DUST) has applied everything up to the highest index the indexer
+ *   reports and stays there for several samples. The facade's `isSynced` flag alone is
+ *   not trusted. A first sync downloads every zswap and DUST ledger event of the chain;
+ *   the wait is bounded (default 60 minutes) and prints public progress every 30 s.
+ *
  * The wallet reads the chain through the indexer and submits through the node relay.
- * It keeps its state in memory only; nothing is written to disk.
+ * It keeps its state in memory, unless a wallet-state cache file is given (see
+ * `./wallet-cache`): then the state saved after an earlier complete sync is restored,
+ * and the state is saved again after each complete sync that happens before this
+ * session builds a transaction.
  *
  * @module
  */
@@ -40,10 +49,26 @@ import {
 } from "@midnightntwrk/wallet-sdk-unshielded-wallet";
 import { mnemonicToSeedSync, validateMnemonic } from "@scure/bip39";
 import { wordlist as english } from "@scure/bip39/wordlists/english.js";
-import * as Rx from "rxjs";
 
 import type { PublicationBalancer, PublicationSubmitter } from "../transaction/finalize.js";
 import { readProtectedFile, SecretFileError } from "./secrets.js";
+import {
+  loadWalletCache,
+  sameFile,
+  saveWalletCache,
+  WalletCacheError,
+  type WalletSnapshots,
+} from "./wallet-cache.js";
+import {
+  DEFAULT_SYNC_PROGRESS_MS,
+  DEFAULT_SYNC_SAMPLE_MS,
+  DEFAULT_SYNC_STABLE_SAMPLES,
+  DEFAULT_SYNC_TIMEOUT_MS,
+  formatDuration,
+  formatSyncProgress,
+  type SyncWaitOptions,
+  waitForCompleteSync,
+} from "./wallet-sync.js";
 
 /** Endpoints a wallet session talks to. */
 export interface WalletNetwork {
@@ -198,8 +223,20 @@ export interface WalletSessionOptions {
   readonly dustParameters: ledger.DustParameters;
   /** Fee headroom in blocks for the wallet's fee estimate (default 100). */
   readonly feeBlocksMargin?: number;
-  /** Bound for a sync (default 600000 ms). */
+  /** Bound for a complete sync (default 60 minutes). */
   readonly syncTimeoutMs?: number;
+  /** Sampling interval of the sync check (default 5 s). */
+  readonly syncSampleMs?: number;
+  /** Consecutive caught-up samples the sync check requires (default 3). */
+  readonly syncStableSamples?: number;
+  /** Interval between public sync progress lines (default 30 s). */
+  readonly syncProgressMs?: number;
+  /**
+   * Optional wallet-state cache file (mode 0600, outside every Git working tree): the
+   * state saved there by an earlier complete sync is restored, and it is saved again
+   * after a complete sync. See `./wallet-cache`.
+   */
+  readonly stateCacheFile?: string;
   /** Bound for waiting until DUST covers a fee (default 600000 ms). */
   readonly feeWaitMs?: number;
   /** Public progress messages (never secret). */
@@ -221,9 +258,14 @@ export class WalletSession {
   readonly identity: PublicWalletIdentity;
   readonly #facade: WalletFacade;
   readonly #keys: WalletKeys;
-  readonly #syncTimeoutMs: number;
+  readonly #sync: Required<Omit<SyncWaitOptions, "log">>;
   readonly #feeWaitMs: number;
   readonly #log: (message: string) => void;
+  readonly #cacheFile: string | undefined;
+  /** Set once this session starts building a transaction: the cache is not saved after. */
+  #transacted = false;
+  #syncedOnce = false;
+  #savedProgress: string | undefined;
 
   private constructor(
     facade: WalletFacade,
@@ -234,19 +276,67 @@ export class WalletSession {
     this.#facade = facade;
     this.#keys = keys;
     this.identity = identity;
-    this.#syncTimeoutMs = options.syncTimeoutMs ?? 600_000;
+    this.#sync = {
+      timeoutMs: options.syncTimeoutMs ?? DEFAULT_SYNC_TIMEOUT_MS,
+      sampleMs: options.syncSampleMs ?? DEFAULT_SYNC_SAMPLE_MS,
+      stableSamples: options.syncStableSamples ?? DEFAULT_SYNC_STABLE_SAMPLES,
+      progressEveryMs: options.syncProgressMs ?? DEFAULT_SYNC_PROGRESS_MS,
+    };
     this.#feeWaitMs = options.feeWaitMs ?? 600_000;
     this.#log = options.log ?? (() => undefined);
+    this.#cacheFile = options.stateCacheFile;
   }
 
-  /** Read the mnemonic file, derive keys, build and start the wallet. */
+  /**
+   * Read the mnemonic file, derive keys, build and start the wallet (restoring the
+   * cached state when a cache file is given and holds one for this wallet).
+   *
+   * @throws {WalletCacheError} When the cache file is unsafe, is the mnemonic file, is
+   * not a wallet cache, or belongs to another wallet or network.
+   */
   static async open(options: WalletSessionOptions): Promise<WalletSession> {
+    const cacheFile = options.stateCacheFile;
+    if (cacheFile !== undefined && sameFile(cacheFile, options.mnemonicFile)) {
+      throw new WalletCacheError(cacheFile, "is the mnemonic file; choose another path");
+    }
+    const log = options.log ?? (() => undefined);
     const keys = deriveWalletKeys(
       readMnemonicFile(options.mnemonicFile),
       options.network.networkId,
     );
     try {
       const identity = publicIdentity(keys, options.network.networkId);
+      let snapshots: WalletSnapshots | undefined;
+      if (cacheFile !== undefined) {
+        const cached = loadWalletCache(cacheFile, identity);
+        if (cached.status === "restorable") {
+          snapshots = cached.snapshots;
+          log(`wallet cache       restoring the state saved at ${cached.savedAt}`);
+        } else if (cached.status === "stale") {
+          log(`wallet cache       not restored: ${cached.reason}`);
+        } else {
+          log("wallet cache       none yet; it is written after the first complete sync");
+        }
+      }
+      // A snapshot the SDK cannot restore is skipped (its error text is not shown: it
+      // can quote the snapshot); that sub-wallet then syncs from the start.
+      const restoreOr = <T>(
+        name: string,
+        snapshot: string | undefined,
+        restore: (serialized: string) => T,
+        fresh: () => T,
+      ): T => {
+        if (snapshot !== undefined) {
+          try {
+            return restore(snapshot);
+          } catch {
+            log(
+              `wallet cache       the ${name} state could not be restored; syncing it from the start`,
+            );
+          }
+        }
+        return fresh();
+      };
       const configuration = {
         networkId: options.network.networkId,
         indexerClientConnection: {
@@ -260,13 +350,30 @@ export class WalletSession {
       };
       const facade = await WalletFacade.init({
         configuration,
-        shielded: (config) => ShieldedWallet(config).startWithSecretKeys(keys.shieldedSecretKeys),
+        shielded: (config) =>
+          restoreOr(
+            "shielded",
+            snapshots?.shielded,
+            (serialized) => ShieldedWallet(config).restore(serialized),
+            () => ShieldedWallet(config).startWithSecretKeys(keys.shieldedSecretKeys),
+          ),
         unshielded: (config) =>
-          UnshieldedWallet(config).startWithPublicKey(
-            PublicKey.fromKeyStore(keys.unshieldedKeystore),
+          restoreOr(
+            "unshielded",
+            snapshots?.unshielded,
+            (serialized) => UnshieldedWallet(config).restore(serialized),
+            () =>
+              UnshieldedWallet(config).startWithPublicKey(
+                PublicKey.fromKeyStore(keys.unshieldedKeystore),
+              ),
           ),
         dust: (config) =>
-          DustWallet(config).startWithSecretKey(keys.dustSecretKey, options.dustParameters),
+          restoreOr(
+            "DUST",
+            snapshots?.dust,
+            (serialized) => DustWallet(config).restore(serialized),
+            () => DustWallet(config).startWithSecretKey(keys.dustSecretKey, options.dustParameters),
+          ),
       });
       await facade.start(keys.shieldedSecretKeys, keys.dustSecretKey);
       return new WalletSession(facade, keys, identity, options);
@@ -276,18 +383,54 @@ export class WalletSession {
     }
   }
 
-  /** Wait for a stable synced state (sampled every 5 s; the flag can flip early). */
+  /**
+   * Wait for a COMPLETE sync: every sub-wallet has applied everything up to the highest
+   * index the indexer reports, for several consecutive samples (see `./wallet-sync`).
+   * Prints public progress through the log callback. Saves the cache, if configured,
+   * while this session has not started a transaction.
+   *
+   * @throws {WalletNotSyncedError} When the sync does not complete in time.
+   */
   async synced(): Promise<FacadeState> {
-    return await Rx.firstValueFrom(
-      this.#facade.state().pipe(
-        Rx.throttleTime(5_000, undefined, { leading: true, trailing: true }),
-        Rx.filter((state) => state.isSynced),
-        Rx.timeout({
-          first: this.#syncTimeoutMs,
-          with: () => Rx.throwError(() => new Error("wallet did not sync in time")),
-        }),
-      ),
-    );
+    const first = !this.#syncedOnce;
+    if (first) {
+      this.#log(
+        `wallet sync        waiting until the shielded, unshielded and DUST wallets have applied everything the indexer reports (a first sync downloads every ledger event and can take long; timeout ${formatDuration(this.#sync.timeoutMs)}, progress every ${formatDuration(this.#sync.progressEveryMs)})`,
+      );
+    }
+    const { state, progress, elapsedMs } = await waitForCompleteSync(this.#facade.state(), {
+      ...this.#sync,
+      log: this.#log,
+    });
+    if (first) {
+      this.#syncedOnce = true;
+      this.#log(
+        `wallet synced      in ${formatDuration(elapsedMs)}: ${formatSyncProgress(progress)}`,
+      );
+    }
+    this.#saveCache(state, formatSyncProgress(progress));
+    return state;
+  }
+
+  #saveCache(state: FacadeState, progress: string): void {
+    const path = this.#cacheFile;
+    if (path === undefined || this.#transacted || this.#savedProgress === progress) return;
+    try {
+      saveWalletCache(path, this.identity, {
+        shielded: state.shielded.serialize(),
+        unshielded: state.unshielded.serialize(),
+        dust: state.dust.serialize(),
+      });
+      this.#savedProgress = progress;
+      this.#log(`wallet cache       saved (${progress})`);
+    } catch (error) {
+      // Never fatal: the next run syncs from the start instead.
+      this.#log(
+        error instanceof WalletCacheError
+          ? `wallet cache       not saved: ${error.message}`
+          : "wallet cache       not saved: the wallet state could not be serialized",
+      );
+    }
   }
 
   /** Balances after a sync. */
@@ -331,6 +474,7 @@ export class WalletSession {
     const estimate = await this.#facade.estimateRegistration(unregistered);
     if (mode === "estimate") return { mode, unregistered: unregistered.length, fee: estimate.fee };
     const waitMs = options.waitMs ?? 600_000;
+    this.#transacted = true;
     await this.#facade.waitForGeneratedDust(unregistered, estimate.fee, { timeoutMs: waitMs });
     const recipe = await this.#facade.registerNightUtxosForDustGeneration(
       unregistered,
@@ -396,6 +540,7 @@ export class WalletSession {
   balancer(): PublicationBalancer {
     return {
       balanceTx: async (tx, ttl) => {
+        this.#transacted = true;
         const transactionTtl = ttl ?? new Date(Date.now() + 20 * 60 * 1000);
         await this.#waitForFeeBudget(tx, transactionTtl);
         const recipe = await this.#facade.balanceUnboundTransaction(

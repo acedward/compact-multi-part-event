@@ -107,7 +107,15 @@ import { Contract } from "./managed/my-contract/contract/index.js";
 
 const indexer = new IndexerClient({ url: INDEXER_URL });
 const parameters = ledgerParametersFromHex((await indexer.latestBlock()).ledgerParametersHex!);
-const wallet = await WalletSession.open({ network, mnemonicFile, dustParameters: parameters.dust });
+const wallet = await WalletSession.open({
+  network,
+  mnemonicFile,
+  dustParameters: parameters.dust,
+  syncTimeoutMs: 60 * 60_000, // the default; a first sync can take long
+  stateCacheFile, // optional: protected wallet-state cache, restored on the next run
+  log: console.error, // public progress every 30 s
+});
+await wallet.synced(); // complete sync of all three sub-wallets, or WalletNotSyncedError
 const prover = proofServerProver({
   url: LOCAL_PROOF_SERVER,
   zkConfig: zkConfigForContract({ artifactDir: "build/zk/my-contract", expectedVerifierKeys }),
@@ -133,6 +141,19 @@ const included = await waitForTransaction(indexer, { identifiers: record.identif
 
 What each step guarantees:
 
+- `WalletSession.synced()` (`balances()` and the DUST registration call it too; call it
+  yourself before building and balancing) resolves only after a complete sync: the shielded and
+  DUST wallets have applied every ledger event up to the `maxId` the indexer reports
+  (`progress.appliedIndex` against `progress.highestRelevantWalletIndex`), the
+  unshielded wallet every transaction up to the indexer's highest one for the address
+  (`progress.appliedId` against `progress.highestTransactionId`), all three connected,
+  and they stay caught up for 3 consecutive 5 s samples. The facade's `isSynced` flag is
+  not relied on. Otherwise it throws `WalletNotSyncedError` with the last public
+  progress after `syncTimeoutMs`; never treat balances read before that as final.
+  `waitForCompleteSync` applies the same rule to any facade state stream. With
+  `stateCacheFile` the state saved after a complete sync (before the session builds a
+  transaction) is restored next time; the file is bound to the wallet's public identity,
+  network and SDK version, and must be mode 0600 and outside every Git working tree.
 - `buildPublicationTransaction` refuses a non-canonical or over-cap publication before
   any network access, reads ONE latest block and the state as of that block (with the
   network's ledger parameters), executes every part with the block time in seconds,
@@ -178,5 +199,6 @@ levels and exit statuses are in the [README](../README.md#how-to-verify).
 - [ ] Verifier keys committed with `SHA256SUMS`; the deployed keys are the committed ones.
 - [ ] The client pins one block, uses the network's ledger parameters, and keeps the default or a measured `maxParts`.
 - [ ] Witness secrets and the mnemonic are files (mode 0600, outside every repository); the proof server is yours and local.
+- [ ] The wallet is completely synced (`synced()`) before balances are read or a transaction is balanced; an incomplete sync is reported as "not synced", never as a zero balance.
 - [ ] Records persisted before submission; inclusion tracked by identifiers; no blind resubmission.
 - [ ] Readers verify from raw transaction bytes (Level 2) and, where it matters, against a node (`--node`).

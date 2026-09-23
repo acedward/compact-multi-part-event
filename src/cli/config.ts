@@ -67,6 +67,8 @@ export const ENV_FOR_FLAG: Readonly<Record<string, string>> = {
   "proof-server": "CMSE_PROOF_SERVER_URL",
   "proof-concurrency": "CMSE_PROOF_CONCURRENCY",
   "wallet-mnemonic-file": "CMSE_WALLET_MNEMONIC_FILE",
+  "wallet-cache-file": "CMSE_WALLET_CACHE_FILE",
+  "sync-timeout-minutes": "CMSE_SYNC_TIMEOUT_MINUTES",
   "emitter-secret-file": "CMSE_EMITTER_SECRET_FILE",
   "owner-secret-file": "CMSE_OWNER_SECRET_FILE",
   "maintenance-key-file": "CMSE_MAINTENANCE_KEY_FILE",

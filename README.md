@@ -50,12 +50,31 @@ complete second contract that uses the pattern from outside the library.
    server and the variables of [.env.example](.env.example):
 
    ```sh
-   yarn cmse funding                                   # public addresses and balances only
+   yarn cmse funding --wallet-cache-file ~/cmse/stagenet.wallet-cache.json   # addresses, balances
    yarn cmse deploy --emitter-secret-file ~/cmse/emitter.secret \
      --maintenance-key-file ~/cmse/maintenance.json --out deploy.json
    yarn cmse publish --contract <address> --message-file notice.bin \
      --emitter-secret-file ~/cmse/emitter.secret --record-out publication.json
    ```
+
+   Every command that opens a wallet first waits for a **complete** sync: the shielded,
+   unshielded and DUST wallets must each have applied everything up to the highest index
+   the indexer reports, and stay there for several samples. The first sync of a wallet
+   downloads every zswap and DUST ledger event of the chain and can take a long time; it
+   prints a progress line every 30 s with each wallet's applied and highest index and the
+   elapsed time, for example:
+
+   ```
+   wallet sync        shielded 1200/5000, unshielded 3/3, dust 40000/250000 (applied/highest index), elapsed 2 min 30 s
+   ```
+
+   The wait is bounded by `--sync-timeout-minutes` (`CMSE_SYNC_TIMEOUT_MINUTES`, default
+   60); when the sync does not complete, the command prints `not synced` with the
+   progress and exits 1, and `funding` shows no balance at all rather than a zero.
+   `--wallet-cache-file <path>` (`CMSE_WALLET_CACHE_FILE`) saves the synced wallet state
+   and restores it on the next run, so later syncs only fetch what is new; the file holds
+   private wallet data (no keys), so it gets the secret-file rules (mode 0600, outside
+   every Git working tree).
 
    `deploy` creates the emitter secret and the maintenance key in new files (mode 0600,
    outside every Git working tree) and never prints them. `publish` builds one
@@ -208,7 +227,7 @@ contracts/modules/MessageRegistry.compact    example access control: per-message
 contracts/emitter.compact, contracts/keys/   reference emitter and its committed verifier key + SHA256SUMS
 src/codec/                                   writer, strict reader, width restoration, raw-transaction verifier
 src/transaction/                             injected binding, aggregate assembly, stage checks, deploy, single calls
-src/adapters/                                indexer, proof server, wallet, zk artifacts, protected secret files
+src/adapters/                                indexer, proof server, wallet (complete sync, state cache), zk artifacts, secret files
 src/cli/                                     cmse: funding, deploy, deploy-consumer, register, publish, verify
 examples/consumer/                           a second contract and client using the public entry points
 tests/, vectors/                             unit, adversarial, ledger, CLI and consumer tests; golden vectors
@@ -230,7 +249,10 @@ docs/INTEGRATION.md                          adding the pattern to your own cont
 - Witness secrets are private proof inputs, so the proof server sees them. The CLI
   accepts only a loopback proof server unless told otherwise (`--allow-remote-prover`).
 - Secrets are files referenced by path: mode 0600, outside every Git working tree, never
-  printed or written to records. `.env.example` holds paths only.
+  printed or written to records. `.env.example` holds paths only. The optional wallet
+  cache holds no key but does hold the wallet's private coin data; it follows the same
+  rules, is bound to one wallet and network, and a file that is not such a cache is never
+  overwritten.
 - The indexer is trusted for events and state; `--node` removes that trust for the raw
   transaction bytes. Run your own indexer to remove the rest.
 - Proof validity is the network's: inclusion on chain means the node verified the proofs.

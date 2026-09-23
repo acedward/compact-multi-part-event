@@ -22,7 +22,9 @@ import {
 } from "../adapters/indexer.js";
 import { proofServerProver, proverFromEndpoint } from "../adapters/prover.js";
 import { SecretFileError } from "../adapters/secrets.js";
-import { WalletSession } from "../adapters/wallet.js";
+import { WalletSession, type WalletSessionOptions } from "../adapters/wallet.js";
+import { WalletCacheError } from "../adapters/wallet-cache.js";
+import { WalletNotSyncedError } from "../adapters/wallet-sync.js";
 import { checkArtifactHashes, zkConfigForContract } from "../adapters/zk-config.js";
 import { hexToBytes } from "../codec/bytes.js";
 import { FORMAT_MAX_PARTS } from "../codec/constants.js";
@@ -30,10 +32,13 @@ import {
   DEFAULT_MAX_PARTS,
   DEFAULT_TTL_SECONDS,
   PublicationCheckError,
+  type PublicationBalancer,
+  type PublicationSubmitter,
 } from "../transaction/index.js";
 import {
   type ChainServices,
   CommandFailure,
+  type FundingWallet,
   type IncludedTransaction,
   jsonSafe,
   runDeploy,
@@ -41,7 +46,14 @@ import {
   runPublish,
   runRegister,
 } from "./commands.js";
-import { Options, parseArgs, resolveEndpoints, resolveProofServer, UsageError } from "./config.js";
+import {
+  type Endpoints,
+  Options,
+  parseArgs,
+  resolveEndpoints,
+  resolveProofServer,
+  UsageError,
+} from "./config.js";
 import {
   committedVerifierKeys,
   contractProfiles,
@@ -73,6 +85,14 @@ Network (flag or environment variable; defaults are stagenet's public endpoints)
 Secrets (paths only; files are mode 0600, outside every Git working tree):
   --wallet-mnemonic-file CMSE_WALLET_MNEMONIC_FILE   --emitter-secret-file CMSE_EMITTER_SECRET_FILE
   --owner-secret-file CMSE_OWNER_SECRET_FILE         --maintenance-key-file CMSE_MAINTENANCE_KEY_FILE
+Wallet sync (every command that opens a wallet waits for a COMPLETE sync of the shielded,
+unshielded and DUST wallets; a first sync downloads every ledger event and can take long):
+  --sync-timeout-minutes CMSE_SYNC_TIMEOUT_MINUTES (60)   progress is printed every 30 s;
+  --wallet-cache-file CMSE_WALLET_CACHE_FILE (optional; mode 0600, outside every Git working tree)
+      saves the synced wallet state and restores it on the next run. It holds private wallet
+      data (no keys): protect it like a secret file.
+If the sync does not complete in time the command prints "not synced" and exits 1; balances
+are never printed from an incomplete sync.
 
 verify levels: 1 the message (complete canonical group, exact names, SHA-256); 2 the placement
 (guaranteed-only emission calls in one included transaction, from the raw bytes; with --node the
@@ -89,6 +109,8 @@ const VALUED = new Set([
   "proof-server",
   "proof-concurrency",
   "wallet-mnemonic-file",
+  "wallet-cache-file",
+  "sync-timeout-minutes",
   "emitter-secret-file",
   "owner-secret-file",
   "maintenance-key-file",
@@ -128,6 +150,49 @@ export interface Io {
   readonly out: (line: string) => void;
   readonly err: (line: string) => void;
 }
+
+/** What the CLI needs from a wallet ({@link WalletSession} provides it). */
+export interface CliWallet extends FundingWallet {
+  /** Resolves after a complete sync; throws `WalletNotSyncedError` otherwise. */
+  synced(): Promise<unknown>;
+  balancer(): PublicationBalancer;
+  submitter(): PublicationSubmitter;
+  coinPublicKey(): string;
+  close(): Promise<void>;
+}
+
+/** Replaceable services of {@link main} (tests use stand-ins). */
+export interface CliDependencies {
+  /** Opens the wallet (default {@link WalletSession.open}). */
+  readonly openWallet?: (options: WalletSessionOptions) => Promise<CliWallet>;
+}
+
+/** Open the wallet with the command line's sync and cache settings. */
+const openWallet = async (
+  options: Options,
+  endpoints: Endpoints,
+  proofServerUrl: string,
+  dustParameters: WalletSessionOptions["dustParameters"],
+  log: (line: string) => void,
+  dependencies: CliDependencies,
+): Promise<CliWallet> => {
+  const stateCacheFile = options.string("wallet-cache-file");
+  const open = dependencies.openWallet ?? ((settings) => WalletSession.open(settings));
+  return await open({
+    network: {
+      networkId: endpoints.network,
+      indexerHttpUrl: endpoints.indexer,
+      indexerWsUrl: endpoints.indexerWs,
+      nodeUrl: endpoints.node,
+      proofServerUrl,
+    },
+    mnemonicFile: options.required("wallet-mnemonic-file", "the wallet mnemonic file"),
+    dustParameters,
+    syncTimeoutMs: options.integer("sync-timeout-minutes", 60, 24 * 60) * 60_000,
+    ...(stateCacheFile === undefined ? {} : { stateCacheFile }),
+    log,
+  });
+};
 
 const address = (options: Options): string => {
   const value = options
@@ -195,6 +260,7 @@ const openChainServices = async (
   profile: ContractProfile,
   proves: boolean,
   log: (line: string) => void,
+  dependencies: CliDependencies,
 ): Promise<OpenedServices> => {
   const endpoints = resolveEndpoints(options);
   const proofServer = resolveProofServer(options);
@@ -224,18 +290,14 @@ const openChainServices = async (
     });
   }
   log(`opening wallet     (syncing with ${endpoints.indexer})`);
-  const wallet = await WalletSession.open({
-    network: {
-      networkId: endpoints.network,
-      indexerHttpUrl: endpoints.indexer,
-      indexerWsUrl: endpoints.indexerWs,
-      nodeUrl: endpoints.node,
-      proofServerUrl: proofServer,
-    },
-    mnemonicFile: options.required("wallet-mnemonic-file", "the wallet mnemonic file"),
-    dustParameters: parameters.dust,
+  const wallet = await openWallet(
+    options,
+    endpoints,
+    proofServer,
+    parameters.dust,
     log,
-  });
+    dependencies,
+  );
   try {
     await wallet.synced();
   } catch (error) {
@@ -346,6 +408,7 @@ const runChainCommand = async (
   options: Options,
   io: Io,
   json: boolean,
+  dependencies: CliDependencies,
 ): Promise<number> => {
   const log = json ? io.err : io.out;
   const profile =
@@ -356,7 +419,7 @@ const runChainCommand = async (
         : profileOf(options);
   const generated = await loadGeneratedModule(profile);
   const proves = command === "register" || command === "publish";
-  const opened = await openChainServices(options, profile, proves, log);
+  const opened = await openChainServices(options, profile, proves, log, dependencies);
   try {
     let result: unknown;
     const ttlSeconds = options.integer("ttl-seconds", DEFAULT_TTL_SECONDS, 3600);
@@ -426,7 +489,12 @@ const runChainCommand = async (
   }
 };
 
-const runFundingCommand = async (options: Options, io: Io, json: boolean): Promise<number> => {
+const runFundingCommand = async (
+  options: Options,
+  io: Io,
+  json: boolean,
+  dependencies: CliDependencies,
+): Promise<number> => {
   const log = json ? io.err : io.out;
   const mode = options.string("register-dust");
   if (mode !== undefined && mode !== "estimate" && mode !== "register") {
@@ -439,18 +507,14 @@ const runFundingCommand = async (options: Options, io: Io, json: boolean): Promi
   if (latest.ledgerParametersHex === undefined) {
     throw new PublicDataError("shape", "the indexer did not return ledger parameters");
   }
-  const wallet = await WalletSession.open({
-    network: {
-      networkId: endpoints.network,
-      indexerHttpUrl: endpoints.indexer,
-      indexerWsUrl: endpoints.indexerWs,
-      nodeUrl: endpoints.node,
-      proofServerUrl: proofServer,
-    },
-    mnemonicFile: options.required("wallet-mnemonic-file", "the wallet mnemonic file"),
-    dustParameters: ledgerParametersFromHex(latest.ledgerParametersHex).dust,
+  const wallet = await openWallet(
+    options,
+    endpoints,
+    proofServer,
+    ledgerParametersFromHex(latest.ledgerParametersHex).dust,
     log,
-  });
+    dependencies,
+  );
   try {
     const report = await runFunding(wallet, mode === undefined ? {} : { registerDust: mode }, log);
     if (json) io.out(JSON.stringify(jsonSafe(report), null, 2));
@@ -468,6 +532,7 @@ export const main = async (
   argv: readonly string[],
   env: Readonly<Record<string, string | undefined>> = process.env,
   io: Io = { out: (line) => console.log(line), err: (line) => console.error(line) },
+  dependencies: CliDependencies = {},
 ): Promise<number> => {
   try {
     const parsed = parseArgs(argv, VALUED, SWITCHES);
@@ -481,20 +546,25 @@ export const main = async (
       case "verify":
         return await runVerify(options, io, json);
       case "funding":
-        return await runFundingCommand(options, io, json);
+        return await runFundingCommand(options, io, json, dependencies);
       case "deploy":
       case "deploy-consumer":
       case "register":
       case "publish":
-        return await runChainCommand(parsed.command, options, io, json);
+        return await runChainCommand(parsed.command, options, io, json, dependencies);
       default:
         throw new UsageError(`unknown command '${parsed.command}'`);
     }
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
+    if (error instanceof WalletNotSyncedError) {
+      io.err(`not synced: ${message}`);
+      return 1;
+    }
     if (
       error instanceof UsageError ||
       error instanceof SecretFileError ||
+      error instanceof WalletCacheError ||
       error instanceof RangeError
     ) {
       io.err(`error: ${message}`);
