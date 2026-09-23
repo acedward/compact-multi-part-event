@@ -318,7 +318,9 @@ CLI's margin is 5 blocks by default, about ×1.25 (`--fee-blocks-margin`,
 | M4, 4 parts | 5 blocks (default) | 0.318 DUST   | 0.380 DUST (×1.20) |
 
 The consumed factor is a little below the nominal one because the wallet's estimate of a
-proven publication's base fee is about 4% below the ledger's required fee.
+proven publication's base fee is about 4% below the ledger's required fee. A margin of
+0 therefore declares less than the ledger requires, and 1 leaves no headroom: keep at
+least 2.
 
 ## How to test
 
