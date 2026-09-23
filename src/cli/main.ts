@@ -22,7 +22,12 @@ import {
 } from "../adapters/indexer.js";
 import { proofServerProver, proverFromEndpoint } from "../adapters/prover.js";
 import { SecretFileError } from "../adapters/secrets.js";
-import { WalletSession, type WalletSessionOptions } from "../adapters/wallet.js";
+import {
+  DEFAULT_FEE_BLOCKS_MARGIN,
+  MAX_FEE_BLOCKS_MARGIN,
+  WalletSession,
+  type WalletSessionOptions,
+} from "../adapters/wallet.js";
 import { WalletCacheError } from "../adapters/wallet-cache.js";
 import { WalletNotSyncedError } from "../adapters/wallet-sync.js";
 import { checkArtifactHashes, zkConfigForContract } from "../adapters/zk-config.js";
@@ -93,6 +98,11 @@ unshielded and DUST wallets; a first sync downloads every ledger event and can t
       data (no keys): protect it like a secret file.
 If the sync does not complete in time the command prints "not synced" and exits 1; balances
 are never printed from an incomplete sync.
+Wallet fees: --fee-blocks-margin CMSE_FEE_BLOCKS_MARGIN (5; an integer from 0 to 100)
+  the wallet declares, and the ledger consumes, the fee the transaction would need after
+  the fee prices rose for this many blocks (up to about 4.6% per block on stagenet: 5
+  blocks ≈ ×1.25 the required fee, 100 blocks ≈ ×89). Too small a margin can get a
+  transaction refused when prices rise before it is included.
 
 verify levels: 1 the message (complete canonical group, exact names, SHA-256); 2 the placement
 (guaranteed-only emission calls in one included transaction, from the raw bytes; with --node the
@@ -111,6 +121,7 @@ const VALUED = new Set([
   "wallet-mnemonic-file",
   "wallet-cache-file",
   "sync-timeout-minutes",
+  "fee-blocks-margin",
   "emitter-secret-file",
   "owner-secret-file",
   "maintenance-key-file",
@@ -167,7 +178,7 @@ export interface CliDependencies {
   readonly openWallet?: (options: WalletSessionOptions) => Promise<CliWallet>;
 }
 
-/** Open the wallet with the command line's sync and cache settings. */
+/** Open the wallet with the command line's sync, cache and fee-margin settings. */
 const openWallet = async (
   options: Options,
   endpoints: Endpoints,
@@ -189,6 +200,12 @@ const openWallet = async (
     mnemonicFile: options.required("wallet-mnemonic-file", "the wallet mnemonic file"),
     dustParameters,
     syncTimeoutMs: options.integer("sync-timeout-minutes", 60, 24 * 60) * 60_000,
+    feeBlocksMargin: options.integer(
+      "fee-blocks-margin",
+      DEFAULT_FEE_BLOCKS_MARGIN,
+      MAX_FEE_BLOCKS_MARGIN,
+      0,
+    ),
     ...(stateCacheFile === undefined ? {} : { stateCacheFile }),
     log,
   });

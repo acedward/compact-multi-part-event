@@ -131,7 +131,9 @@ complete second contract that uses the pattern from outside the library.
    After `--sync-timeout-minutes` (`CMSE_SYNC_TIMEOUT_MINUTES`, default 60) the command
    prints `not synced` and exits 1; `funding` then shows no balance rather than a zero.
    `--wallet-cache-file <path>` (`CMSE_WALLET_CACHE_FILE`) keeps the synced state for the
-   next run.
+   next run. `--fee-blocks-margin <0..100>` (`CMSE_FEE_BLOCKS_MARGIN`, default 5) sets how
+   many blocks of fee-price rises the wallet's fee covers (see
+   [What to expect](#what-to-expect)).
 
    `deploy` creates the emitter secret and the maintenance key in new files and never
    prints them. `publish` builds one aggregate guaranteed-only transaction, proves it,

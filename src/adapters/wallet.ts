@@ -70,6 +70,14 @@ import {
   waitForCompleteSync,
 } from "./wallet-sync.js";
 
+/**
+ * Default fee headroom, in blocks, of the wallet's fee estimate: the value the Midnight
+ * wallet SDK uses in its own testkit, end-to-end tests and documentation snippets.
+ */
+export const DEFAULT_FEE_BLOCKS_MARGIN = 5;
+/** Largest accepted fee headroom, in blocks. */
+export const MAX_FEE_BLOCKS_MARGIN = 100;
+
 /** Endpoints a wallet session talks to. */
 export interface WalletNetwork {
   /** Ledger network id, e.g. `stagenet`. */
@@ -221,7 +229,12 @@ export interface WalletSessionOptions {
   readonly mnemonicFile: string;
   /** DUST parameters of the network (from its current ledger parameters). */
   readonly dustParameters: ledger.DustParameters;
-  /** Fee headroom in blocks for the wallet's fee estimate (default 100). */
+  /**
+   * Fee headroom in blocks, an integer from 0 to 100 (default 5). The wallet declares the
+   * fee the transaction would need after the fee prices rose for this many blocks
+   * (`required × maxPriceAdjustment^margin`, about ×1.25 for 5 blocks on stagenet), and
+   * the ledger consumes the declared fee, not only the required one.
+   */
   readonly feeBlocksMargin?: number;
   /** Bound for a complete sync (default 60 minutes). */
   readonly syncTimeoutMs?: number;
@@ -248,6 +261,37 @@ const wsUrl = (httpUrl: string): URL => {
   if (url.protocol === "https:") url.protocol = "wss:";
   else if (url.protocol === "http:") url.protocol = "ws:";
   return url;
+};
+
+/**
+ * The wallet facade's configuration for a network and fee headroom.
+ *
+ * @throws {RangeError} When `feeBlocksMargin` is not an integer from 0 to 100.
+ */
+export const walletFacadeConfiguration = (
+  network: WalletNetwork,
+  feeBlocksMargin: number = DEFAULT_FEE_BLOCKS_MARGIN,
+) => {
+  if (
+    !Number.isSafeInteger(feeBlocksMargin) ||
+    feeBlocksMargin < 0 ||
+    feeBlocksMargin > MAX_FEE_BLOCKS_MARGIN
+  ) {
+    throw new RangeError(
+      `the fee margin must be an integer from 0 to ${String(MAX_FEE_BLOCKS_MARGIN)} blocks`,
+    );
+  }
+  return {
+    networkId: network.networkId,
+    indexerClientConnection: {
+      indexerHttpUrl: network.indexerHttpUrl,
+      indexerWsUrl: network.indexerWsUrl,
+    },
+    provingServerUrl: new URL(network.proofServerUrl),
+    relayURL: wsUrl(network.nodeUrl),
+    costParameters: { feeBlocksMargin },
+    txHistoryStorage: new NoOpTransactionHistoryStorage(),
+  };
 };
 
 const errorText = (error: unknown): string =>
@@ -293,12 +337,15 @@ export class WalletSession {
    *
    * @throws {WalletCacheError} When the cache file is unsafe, is the mnemonic file, is
    * not a wallet cache, or belongs to another wallet or network.
+   * @throws {RangeError} When `feeBlocksMargin` is not an integer from 0 to 100.
    */
   static async open(options: WalletSessionOptions): Promise<WalletSession> {
     const cacheFile = options.stateCacheFile;
     if (cacheFile !== undefined && sameFile(cacheFile, options.mnemonicFile)) {
       throw new WalletCacheError(cacheFile, "is the mnemonic file; choose another path");
     }
+    // Checked before the mnemonic file is read.
+    const configuration = walletFacadeConfiguration(options.network, options.feeBlocksMargin);
     const log = options.log ?? (() => undefined);
     const keys = deriveWalletKeys(
       readMnemonicFile(options.mnemonicFile),
@@ -336,17 +383,6 @@ export class WalletSession {
           }
         }
         return fresh();
-      };
-      const configuration = {
-        networkId: options.network.networkId,
-        indexerClientConnection: {
-          indexerHttpUrl: options.network.indexerHttpUrl,
-          indexerWsUrl: options.network.indexerWsUrl,
-        },
-        provingServerUrl: new URL(options.network.proofServerUrl),
-        relayURL: wsUrl(options.network.nodeUrl),
-        costParameters: { feeBlocksMargin: options.feeBlocksMargin ?? 100 },
-        txHistoryStorage: new NoOpTransactionHistoryStorage(),
       };
       const facade = await WalletFacade.init({
         configuration,

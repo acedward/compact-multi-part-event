@@ -69,6 +69,7 @@ export const ENV_FOR_FLAG: Readonly<Record<string, string>> = {
   "wallet-mnemonic-file": "CMSE_WALLET_MNEMONIC_FILE",
   "wallet-cache-file": "CMSE_WALLET_CACHE_FILE",
   "sync-timeout-minutes": "CMSE_SYNC_TIMEOUT_MINUTES",
+  "fee-blocks-margin": "CMSE_FEE_BLOCKS_MARGIN",
   "emitter-secret-file": "CMSE_EMITTER_SECRET_FILE",
   "owner-secret-file": "CMSE_OWNER_SECRET_FILE",
   "maintenance-key-file": "CMSE_MAINTENANCE_KEY_FILE",
@@ -119,13 +120,14 @@ export class Options {
     return this.flags.get(name) === true;
   }
 
-  /** A positive integer flag with a default. */
-  integer(name: string, fallback: number, max = Number.MAX_SAFE_INTEGER): number {
+  /** An integer flag from `min` (default 1) to `max`, with a default. */
+  integer(name: string, fallback: number, max = Number.MAX_SAFE_INTEGER, min = 1): number {
     const text = this.string(name);
     if (text === undefined) return fallback;
-    const value = Number(text);
-    if (!Number.isSafeInteger(value) || value < 1 || value > max) {
-      throw new UsageError(`--${name} must be an integer from 1 to ${String(max)}`);
+    // Decimal digits only: `Number()` alone would read " " as 0 and "1e1" as 10.
+    const value = /^[+-]?\d+$/u.test(text.trim()) ? Number(text.trim()) : Number.NaN;
+    if (!Number.isSafeInteger(value) || value < min || value > max) {
+      throw new UsageError(`--${name} must be an integer from ${String(min)} to ${String(max)}`);
     }
     return value;
   }

@@ -4,8 +4,9 @@
 // usage: node scripts/p3/dust-fees.mjs <ledger-parameters.hex> <transaction.hex>...
 //
 // The indexer's `fees { paidFees }` reports the required fee; the wallet (facade
-// 5.0.0-beta.2, `feeBlocksMargin: 100`) declares more, so the DUST a transaction
-// consumes can be far higher than `paidFees`. Public data only.
+// 5.0.0-beta.2) declares more, the required fee times `maxPriceAdjustment` to the power
+// of its `feeBlocksMargin` (100 in the P3 run, the CLI's default 5 since S1.10), and
+// the DUST a transaction consumes is the declared fee. Public data only.
 import { Buffer } from "node:buffer";
 import { readFileSync } from "node:fs";
 import { basename } from "node:path";

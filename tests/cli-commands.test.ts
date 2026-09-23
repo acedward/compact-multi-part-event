@@ -7,7 +7,8 @@
  * key-mismatch outcomes with their exit statuses, and the offline raw-bytes mode;
  * `funding` and the other wallet commands through `main()` with a stand-in wallet: an
  * incomplete sync prints "not synced" with its progress (never balances) and exits 1,
- * and the sync timeout and cache flags/environment variables reach the wallet.
+ * and the sync timeout, cache and fee-margin flags/environment variables reach the
+ * wallet (the fee margin: default 5, 0..100, the flag before the environment).
  */
 import { mkdtempSync, readFileSync, statSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -364,6 +365,14 @@ describe("usage (main)", () => {
     if (expected === 2 && argv.length > 0) expect(result.err).toMatch(/^error: /);
   });
 
+  it("documents the fee margin flag, its variable and its default", async () => {
+    const result = await run(["--help"]);
+    expect(result.status).toBe(0);
+    expect(result.out).toContain(
+      "--fee-blocks-margin CMSE_FEE_BLOCKS_MARGIN (5; an integer from 0 to 100)",
+    );
+  });
+
   it("explains why a remote proof server is refused", async () => {
     const result = await run([
       "funding",
@@ -513,6 +522,55 @@ describe("wallet sync (main, stand-in wallet)", () => {
     expect(defaults.opened[0]).not.toHaveProperty("stateCacheFile");
   });
 
+  it("the fee margin defaults to 5 blocks and comes from --fee-blocks-margin or CMSE_FEE_BLOCKS_MARGIN, the flag first", async () => {
+    const defaults = standIn({});
+    expect((await runWith(fundingArgs(), {}, defaults)).status).toBe(0);
+    expect(defaults.opened[0]?.feeBlocksMargin).toBe(5);
+
+    const fromEnv = standIn({});
+    expect((await runWith(fundingArgs(), { CMSE_FEE_BLOCKS_MARGIN: "12" }, fromEnv)).status).toBe(
+      0,
+    );
+    expect(fromEnv.opened[0]?.feeBlocksMargin).toBe(12);
+
+    const flagFirst = standIn({});
+    const both = await runWith(
+      [...fundingArgs(), "--fee-blocks-margin", "0"],
+      { CMSE_FEE_BLOCKS_MARGIN: "12" },
+      flagFirst,
+    );
+    expect(both.status).toBe(0);
+    expect(flagFirst.opened[0]?.feeBlocksMargin).toBe(0);
+
+    const highest = standIn({});
+    expect((await runWith([...fundingArgs(), "--fee-blocks-margin=100"], {}, highest)).status).toBe(
+      0,
+    );
+    expect(highest.opened[0]?.feeBlocksMargin).toBe(100);
+  });
+
+  it.each(["-1", "101", "1.5", "1e1", "five", " "])(
+    "refuses the fee margin %j (not an integer from 0 to 100) before opening a wallet",
+    async (margin) => {
+      for (const [argv, env] of [
+        [[...fundingArgs(), "--fee-blocks-margin", margin], {}],
+        [fundingArgs(), { CMSE_FEE_BLOCKS_MARGIN: margin }],
+      ] as const) {
+        const wallet = standIn({});
+        const result = await runWith([...argv], env, wallet);
+        if (margin.trim() === "" && argv.length === fundingArgs().length) {
+          // An empty or blank variable counts as unset: the default applies.
+          expect(result.status).toBe(0);
+          expect(wallet.opened[0]?.feeBlocksMargin).toBe(5);
+          continue;
+        }
+        expect(result.status).toBe(2);
+        expect(result.err).toContain("--fee-blocks-margin must be an integer from 0 to 100");
+        expect(wallet.opened).toHaveLength(0);
+      }
+    },
+  );
+
   it("refuses a sync timeout outside 1..1440 minutes before opening a wallet", async () => {
     const wallet = standIn({});
     const result = await runWith([...fundingArgs(), "--sync-timeout-minutes", "0"], {}, wallet);
@@ -538,6 +596,7 @@ describe("wallet sync (main, stand-in wallet)", () => {
       /^not synced: wallet not synced after 60 min \(timed out after 60 min\): shielded 1200\/5000/u,
     );
     expect(wallet.closed()).toBe(true);
+    expect(wallet.opened[0]?.feeBlocksMargin).toBe(5);
   });
 });
 

@@ -1,8 +1,10 @@
 /**
  * Wallet adapter, offline parts: reading the mnemonic from a protected file (word count,
  * checksum, file mode; no word ever in an error), HD derivation (deterministic, three
- * distinct roles, network-specific addresses), and a public identity that contains no
- * secret material. Syncing and transacting need a live network (P3).
+ * distinct roles, network-specific addresses), a public identity that contains no
+ * secret material, and the fee margin of the wallet facade's configuration (default 5
+ * blocks, 0..100, checked before the mnemonic is read, passed to `WalletFacade.init`).
+ * Syncing and transacting need a live network (P3).
  *
  * The mnemonic used here is the public all-"abandon" test phrase that SDK test kits
  * ship; it holds no funds and is never used against a network.
@@ -11,11 +13,21 @@ import { chmodSync, mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
+import * as ledger from "@midnightntwrk/ledger-v9";
+import { WalletFacade } from "@midnightntwrk/wallet-sdk-facade";
 import { mnemonicToSeedSync } from "@scure/bip39";
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { SecretFileError } from "../src/adapters/secrets.js";
-import { deriveWalletKeys, publicIdentity, readMnemonicFile } from "../src/adapters/wallet.js";
+import {
+  DEFAULT_FEE_BLOCKS_MARGIN,
+  deriveWalletKeys,
+  publicIdentity,
+  readMnemonicFile,
+  walletFacadeConfiguration,
+  type WalletNetwork,
+  WalletSession,
+} from "../src/adapters/wallet.js";
 import { runFunding } from "../src/cli/commands.js";
 
 const WORDS = `${"abandon ".repeat(23)}diesel`;
@@ -128,5 +140,75 @@ describe("key derivation and public identity", () => {
     expect(output).not.toContain("abandon");
     expect(output).not.toContain(keys.unshieldedKeystore.getSecretKey().toString("hex"));
     expect(report.dustRegistration?.fee).toBe(7n);
+  });
+});
+
+describe("fee margin (wallet facade configuration)", () => {
+  const network: WalletNetwork = {
+    networkId: "stagenet",
+    indexerHttpUrl: "https://indexer.example/api/v4/graphql",
+    indexerWsUrl: "wss://indexer.example/api/v4/graphql/ws",
+    nodeUrl: "https://rpc.example",
+    proofServerUrl: "http://127.0.0.1:6300",
+  };
+
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  it("defaults to 5 blocks, the wallet SDK's own test value, and passes 0..100 through", () => {
+    expect(DEFAULT_FEE_BLOCKS_MARGIN).toBe(5);
+    expect(walletFacadeConfiguration(network).costParameters).toEqual({ feeBlocksMargin: 5 });
+    for (const margin of [0, 1, 10, 100]) {
+      expect(walletFacadeConfiguration(network, margin).costParameters.feeBlocksMargin).toBe(
+        margin,
+      );
+    }
+    const configuration = walletFacadeConfiguration(network);
+    expect(configuration.relayURL.href).toBe("wss://rpc.example/");
+    expect(configuration.provingServerUrl.href).toBe("http://127.0.0.1:6300/");
+  });
+
+  it("refuses a margin that is not an integer from 0 to 100", () => {
+    for (const margin of [-1, 101, 2.5, Number.NaN, Number.POSITIVE_INFINITY]) {
+      expect(() => walletFacadeConfiguration(network, margin)).toThrow(RangeError);
+    }
+  });
+
+  it("WalletSession.open hands the margin to WalletFacade.init, and checks it before reading the mnemonic", async () => {
+    const seen: unknown[] = [];
+    const stop = new Error("stop after init was called");
+    vi.spyOn(WalletFacade, "init").mockImplementation((settings) => {
+      seen.push(settings.configuration);
+      return Promise.reject(stop);
+    });
+    const dustParameters = ledger.LedgerParameters.initialParameters().dust;
+    const mnemonicFile = file(WORDS);
+    for (const [feeBlocksMargin, expected] of [
+      [undefined, 5],
+      [0, 0],
+      [42, 42],
+    ] as const) {
+      await expect(
+        WalletSession.open({
+          network,
+          mnemonicFile,
+          dustParameters,
+          ...(feeBlocksMargin === undefined ? {} : { feeBlocksMargin }),
+        }),
+      ).rejects.toBe(stop);
+      expect(seen.at(-1)).toMatchObject({ costParameters: { feeBlocksMargin: expected } });
+    }
+    expect(seen).toHaveLength(3);
+    // An invalid margin fails first: the (missing) mnemonic file is never read.
+    await expect(
+      WalletSession.open({
+        network,
+        mnemonicFile: "/nonexistent/wallet.mnemonic",
+        dustParameters,
+        feeBlocksMargin: 101,
+      }),
+    ).rejects.toThrow(RangeError);
+    expect(seen).toHaveLength(3);
   });
 });

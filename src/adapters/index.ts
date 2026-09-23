@@ -51,13 +51,16 @@ export {
   writeSigningKeyFile,
 } from "./secrets.js";
 export {
+  DEFAULT_FEE_BLOCKS_MARGIN,
   deriveWalletKeys,
   type DustRegistrationReport,
+  MAX_FEE_BLOCKS_MARGIN,
   type NightUtxo,
   publicIdentity,
   type PublicWalletIdentity,
   readMnemonicFile,
   type WalletBalances,
+  walletFacadeConfiguration,
   type WalletKeys,
   type WalletNetwork,
   WalletSession,

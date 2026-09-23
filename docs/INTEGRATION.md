@@ -114,6 +114,7 @@ const wallet = await WalletSession.open({
   mnemonicFile,
   dustParameters: parameters.dust,
   syncTimeoutMs: 60 * 60_000, // the default; a first sync can take long
+  feeBlocksMargin: 5, // the default: the fee covers 5 blocks of price rises (0..100)
   stateCacheFile, // optional: protected wallet-state cache, restored on the next run
   log: console.error, // public progress every 30 s
 });
@@ -156,6 +157,9 @@ What each step guarantees:
   `stateCacheFile` the state saved after a complete sync (before the session builds a
   transaction) is restored next time; the file is bound to the wallet's public identity,
   network and SDK version, and must be mode 0600 and outside every Git working tree.
+  `feeBlocksMargin` (default 5, an integer from 0 to 100) is the facade's
+  `costParameters.feeBlocksMargin`: the wallet declares the required fee ×
+  `maxPriceAdjustment^margin`, and the ledger consumes the declared fee.
 - `buildPublicationTransaction` refuses a non-canonical or over-cap publication before
   any network access, reads ONE latest block and the state as of that block (with the
   network's ledger parameters), executes every part with the block time in seconds,
