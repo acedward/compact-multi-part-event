@@ -594,7 +594,36 @@ const invokedDirectly = (): boolean => {
   }
 };
 
+/** The part of a writable stream {@link exitAfterFlush} waits on. */
+export interface FlushableStream {
+  readonly writableLength: number;
+}
+
+/**
+ * Exit with `status` once stdout and stderr have handed everything written to them to
+ * the operating system (bounded by `timeoutMs`). Calling `process.exit()` right after a
+ * large write to a pipe cuts the output: a `--json` record of a real transaction is
+ * larger than a pipe's 64 KiB buffer.
+ */
+export const exitAfterFlush = async (
+  status: number,
+  options: {
+    readonly streams?: readonly FlushableStream[];
+    readonly exit?: (code: number) => void;
+    readonly timeoutMs?: number;
+    readonly pollMs?: number;
+  } = {},
+): Promise<void> => {
+  const streams = options.streams ?? [process.stdout, process.stderr];
+  const deadline = Date.now() + (options.timeoutMs ?? 30_000);
+  while (streams.some((stream) => stream.writableLength > 0) && Date.now() < deadline) {
+    await new Promise((resolveWait) => setTimeout(resolveWait, options.pollMs ?? 10));
+  }
+  (options.exit ?? ((code: number) => process.exit(code)))(status);
+};
+
 if (invokedDirectly()) {
-  // Exit explicitly: a wallet's indexer subscriptions can keep the event loop alive.
-  process.exit(await main(process.argv.slice(2)));
+  // Exit explicitly (a wallet's indexer subscriptions can keep the event loop alive), but
+  // only after the output is flushed.
+  await exitAfterFlush(await main(process.argv.slice(2)));
 }

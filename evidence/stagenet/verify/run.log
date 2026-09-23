@@ -1,0 +1,21 @@
+# P3.8 wallet-free verification run
+# source: git clone https://github.com/acedward/compact-multi-segment-emit, checkout c4b9b75f705a7409d7b7817d8243bcc61a19e5ad (clean)
+# fresh Docker volumes cmse-p3-verify-{work,cache}; image node:24-bookworm-slim@sha256:2fe369e9...; no secret mounted, no CMSE_* variable
+# started 2026-09-23T14:44:54Z
+➤ YN0000: · Done with warnings in 3s 527ms
+BUILD-OK
+ls: cannot access '/stagenet': No such file or directory
+ls: cannot access '/secrets': No such file or directory
+CMSE_* variables set: 0
+verified up to level 3 — and the deployed emission circuit is the one this repository compiles exit status 0 [m1]
+verified up to level 3 — and the deployed emission circuit is the one this repository compiles exit status 0 [m2]
+verified up to level 3 — and the deployed emission circuit is the one this repository compiles exit status 0 [m3]
+verified up to level 3 — and the deployed emission circuit is the one this repository compiles exit status 0 [q26-merged-both]
+verified up to level 3 — and the deployed emission circuit is the one this repository compiles exit status 0 [q26-a]
+verified up to level 3 — and the deployed emission circuit is the one this repository compiles exit status 0 [q26-b]
+verified up to level 3 — and the deployed emission circuit is the one this repository compiles exit status 0 [consumer-m1]
+verified up to level 0 — nothing verified exit status 3 [negative-m1-tx-at-consumer]
+verified up to level 3 — and the deployed emission circuit is the one this repository compiles exit status 0 [offline-m1]
+verified up to level 3 — and the deployed emission circuit is the one this repository compiles exit status 0 [offline-m2]
+verified up to level 3 — and the deployed emission circuit is the one this repository compiles exit status 0 [offline-q26]
+verified up to level 3 — and the deployed emission circuit is the one this repository compiles exit status 0 [offline-consumer-m1]

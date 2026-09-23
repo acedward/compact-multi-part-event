@@ -37,7 +37,7 @@ import {
   type GeneratedModule,
   loadGeneratedModule,
 } from "../src/cli/contracts.js";
-import { type CliWallet, main } from "../src/cli/main.js";
+import { type CliWallet, exitAfterFlush, main } from "../src/cli/main.js";
 import { buildPublicationTransaction } from "../src/transaction/index.js";
 import { patternMessage, toHex } from "./helpers/bytes.js";
 import { FakeIndexer } from "./helpers/fake-indexer.js";
@@ -538,5 +538,47 @@ describe("wallet sync (main, stand-in wallet)", () => {
       /^not synced: wallet not synced after 60 min \(timed out after 60 min\): shielded 1200\/5000/u,
     );
     expect(wallet.closed()).toBe(true);
+  });
+});
+
+describe("exit after flush (main entry)", () => {
+  it("exits only after every stream has handed its pending output over", async () => {
+    // A stand-in for a pipe that still holds a large --json report: it drains over time.
+    const stdout = { writableLength: 70_000 };
+    const stderr = { writableLength: 0 };
+    const drain = setInterval(() => {
+      stdout.writableLength = Math.max(0, stdout.writableLength - 20_000);
+    }, 5);
+    const exits: { code: number; pendingAtExit: number }[] = [];
+    try {
+      await exitAfterFlush(0, {
+        streams: [stdout, stderr],
+        exit: (code) => exits.push({ code, pendingAtExit: stdout.writableLength }),
+        pollMs: 1,
+      });
+    } finally {
+      clearInterval(drain);
+    }
+    expect(exits).toEqual([{ code: 0, pendingAtExit: 0 }]);
+  });
+
+  it("still exits, with the given status, when a stream never drains (bounded wait)", async () => {
+    const stuck = { writableLength: 1 };
+    const exits: number[] = [];
+    const started = Date.now();
+    await exitAfterFlush(3, {
+      streams: [stuck],
+      exit: (code) => exits.push(code),
+      timeoutMs: 50,
+      pollMs: 5,
+    });
+    expect(exits).toEqual([3]);
+    expect(Date.now() - started).toBeGreaterThanOrEqual(45);
+  });
+
+  it("exits at once when nothing is pending", async () => {
+    const exits: number[] = [];
+    await exitAfterFlush(1, { streams: [{ writableLength: 0 }], exit: (code) => exits.push(code) });
+    expect(exits).toEqual([1]);
   });
 });

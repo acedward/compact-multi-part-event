@@ -1,0 +1,7 @@
+2026-09-23T14:26:37.996306Z  INFO actix_web::middleware::logger: 127.0.0.1 POST /check HTTP/1.1; took 0.009282s
+2026-09-23T14:26:38.563453Z  INFO actix_web::middleware::logger: 127.0.0.1 POST /check HTTP/1.1; took 0.008896s
+2026-09-23T14:26:39.136264Z  INFO actix_web::middleware::logger: 127.0.0.1 POST /check HTTP/1.1; took 0.009029s
+2026-09-23T14:26:54.311570Z  INFO actix_web::middleware::logger: 127.0.0.1 POST /prove HTTP/1.1; took 10.974615s
+2026-09-23T14:26:55.142160Z  INFO actix_web::middleware::logger: 127.0.0.1 POST /prove HTTP/1.1; took 9.515995s
+2026-09-23T14:26:59.667269Z  INFO actix_web::middleware::logger: 127.0.0.1 POST /prove HTTP/1.1; took 11.703554s
+2026-09-23T14:27:00.877688Z  INFO actix_web::middleware::logger: 127.0.0.1 POST /prove HTTP/1.1; took 0.309873s
