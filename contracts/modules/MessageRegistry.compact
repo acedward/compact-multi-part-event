@@ -1,0 +1,54 @@
+pragma language_version >= 0.26;
+
+// Optional example access control for contracts that let several users
+// emit: per-message registration (commit-reveal) against front-running.
+//
+// 1. Register in a SEPARATE, EARLIER transaction. The circuit recomputes
+//    requestId from the tails, which stay private, and stores who owns it.
+//    Nobody else can register the id first without having the message.
+// 2. Publish the parts in a later transaction. Each part checks that the
+//    caller owns the id. (Registering in the same transaction as the parts
+//    would expose the message in the mempool before the registration lands.)
+//
+// registerMessage is generic in the number of parts. Export the sizes you
+// need, e.g.
+//   export circuit register3(id: Bytes<32>, tails: Vector<3, Bytes<224>>): [] {
+//     registerMessage<3>(id, tails);
+//   }
+// Circuit size grows by about 7,100 rows per part (k=19 from about 37 parts).
+module MessageRegistry {
+  import CompactStandardLibrary;
+
+  export ledger messageOwner: Map<Bytes<32>, Bytes<32>>;
+
+  // The owner's secret, from its local witness (private proof input).
+  export witness messageOwnerSecret(): Bytes<32>;
+
+  export pure circuit messageOwnerOf(secret: Bytes<32>): Bytes<32> {
+    return persistentHash<Vector<2, Bytes<32>>>(
+      [pad(32, "example:message-owner:v1"), secret]
+    );
+  }
+
+  export circuit registerMessage<#N>(requestId: Bytes<32>, tails: Vector<N, Bytes<224>>): [] {
+    assert(persistentHash<Vector<N, Bytes<224>>>(tails) == requestId,
+           "MessageRegistry: request id does not match the tails");
+    assert(!messageOwner.member(disclose(requestId)),
+           "MessageRegistry: request id already registered");
+    messageOwner.insert(disclose(requestId), disclose(messageOwnerOf(messageOwnerSecret())));
+  }
+
+  // Parts only read the registry, so every part of a batch sees the same entry.
+  export circuit assertMessageOwner(requestId: Bytes<32>): [] {
+    assert(messageOwner.member(disclose(requestId)), "MessageRegistry: request id not registered");
+    assert(messageOwner.lookup(disclose(requestId)) == messageOwnerOf(messageOwnerSecret()),
+           "MessageRegistry: caller does not own this request id");
+  }
+
+  // Optional cleanup by the owner. Run it after every part: as the last call
+  // of the publication transaction, or later. Never inside a part.
+  export circuit releaseMessage(requestId: Bytes<32>): [] {
+    assertMessageOwner(requestId);
+    messageOwner.remove(disclose(requestId));
+  }
+}

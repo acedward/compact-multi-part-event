@@ -1,0 +1,32 @@
+pragma language_version >= 0.26;
+
+// Test contract: the optional per-message registration (MessageRegistry) wired
+// into an emitter, with the registration sizes the tests use. It exercises the
+// shared modules only; the consumer example in examples/ is the integration
+// reference.
+import CompactStandardLibrary;
+import "../../contracts/modules/MultiSegmentEmit";
+import "../../contracts/modules/MessageRegistry";
+
+export { messageOwnerOf, messageOwner };
+
+export circuit register1(requestId: Bytes<32>, tails: Vector<1, Bytes<224>>): [] {
+  registerMessage<1>(requestId, tails);
+}
+
+export circuit register2(requestId: Bytes<32>, tails: Vector<2, Bytes<224>>): [] {
+  registerMessage<2>(requestId, tails);
+}
+
+export circuit register3(requestId: Bytes<32>, tails: Vector<3, Bytes<224>>): [] {
+  registerMessage<3>(requestId, tails);
+}
+
+export circuit emitPart(requestId: Bytes<32>, payload: Bytes<224>): [] {
+  assertMessageOwner(requestId);
+  emitPartEvent(requestId, payload);
+}
+
+export circuit release(requestId: Bytes<32>): [] {
+  releaseMessage(requestId);
+}

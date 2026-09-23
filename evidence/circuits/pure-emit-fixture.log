@@ -1,0 +1,6 @@
+# compactc 0.34.0 --feature-zkir-v3 --skip-zk tests/contracts/fixtures/pure-emit.compact <tmp>
+Exception: pure-emit.compact line 9 char 1:
+  circuit emitPart is marked pure but is actually impure because it calls (directly or indirectly)
+  impure circuit emitPartEvent;
+    emitPartEvent is impure because it emits an event of type Misc at <standard library>
+# exit status: non-zero (expected)

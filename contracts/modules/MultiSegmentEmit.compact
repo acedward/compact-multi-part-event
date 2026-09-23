@@ -1,0 +1,34 @@
+pragma language_version >= 0.26;
+
+// Multi-segment event emission: publish one long message as several Misc
+// events from ONE transaction that ONE user builds and submits.
+//
+// Off-chain, the user splits the message into 224-byte tails:
+//   bytes 0..7    "p:n" in ASCII - 1-based part number and total parts,
+//                 decimal without leading zeros, zero-padded (e.g. "1:10");
+//                 at most "999:999", so at most 999 parts
+//   bytes 8..15   total message length in bytes, uint64 little-endian
+//   bytes 16..223 up to 208 message bytes, zero-padded after the last one
+// requestId = SHA-256 of all tails in part order (equal to Compact's
+// persistentHash<Vector<n, Bytes<224>>>). The user emits one part per tail,
+// all in one transaction, all guaranteed. Each part is
+//   Misc { name:    "mip-xxxx[v1]:" || tail bytes 0..7 || 11 zero bytes,
+//          payload: requestId || tail }
+// so every event names its own position, e.g. "mip-xxxx[v1]:1:10".
+// Readers accept a publication only if parts 1..n were each emitted exactly
+// once in that transaction, agree on n and the length, and hash to
+// requestId. Any missing, repeated, conflicting or extra part invalidates
+// the whole publication. This module does not hash, split or check
+// completeness, and it does not decide who may emit: apply an access
+// control first (see EmitterWhitelist and MessageRegistry for examples).
+module MultiSegmentEmit {
+  import CompactStandardLibrary;
+
+  export circuit emitPartEvent(requestId: Bytes<32>, payload: Bytes<224>): [] {
+    const tail = disclose(payload);
+    emit (Misc {
+      name: Bytes[...pad(13, "mip-xxxx[v1]:"), ...slice<8>(tail, 0), ...pad(11, "")],
+      payload: Bytes[...disclose(requestId), ...tail],
+    });
+  }
+}

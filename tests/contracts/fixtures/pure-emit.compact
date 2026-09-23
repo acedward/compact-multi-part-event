@@ -1,0 +1,11 @@
+pragma language_version >= 0.26;
+
+// Negative compile fixture (must NOT compile): emitting an event is impure, so
+// a pure circuit cannot call the shared emission logic. scripts/compile-contracts.sh
+// requires this file to fail with the compiler's purity error.
+import CompactStandardLibrary;
+import "../../../contracts/modules/MultiSegmentEmit";
+
+export pure circuit emitPart(requestId: Bytes<32>, payload: Bytes<224>): [] {
+  emitPartEvent(requestId, payload);
+}
