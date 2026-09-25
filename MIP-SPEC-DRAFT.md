@@ -53,7 +53,7 @@ An **adopting protocol** opts an event name into this rule. A **publisher** emit
 The chain and contract address come from the deployed contract instance. The adopting protocol MUST declare:
 
 1. **Event name:** the exact value of the existing `Misc` `name` field, shared by every part. This rule defines no new event name, identifier, or encoding.
-2. **Multipart rule:** `mip-xxxx:multi-part[v1]`.
+2. **Multipart rule:** the protocol's specification MUST state that it follows `mip-xxxx:multi-part[v1]`.
 
 This rule begins only after exact contract and event-name filtering of valid, decoded, applied events. If a protocol has not made that opt-in, this proposal has no effect on its events. Invalid envelopes, unsupported decoders, incomplete API responses, conflicting upstream deliveries, and unavailable history are outside this rule's input boundary.
 
