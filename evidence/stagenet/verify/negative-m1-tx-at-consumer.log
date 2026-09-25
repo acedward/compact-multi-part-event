@@ -1,5 +1,0 @@
-$ cmse verify --kind consumer --contract cf12a32260fd443d0c1d6fce6316bd420fe850a278076e872834e35016c8d7ef --tx 79c26aa9153e09494f6db3a765130a0ced6e657d55ac2e72881b6007b0afca5e --level 3
-transaction 79c26aa9153e09494f6db3a765130a0ced6e657d55ac2e72881b6007b0afca5e at block 588668, status SUCCESS
-not found: the transaction or its events are not indexed (yet)
-verified up to level 0 — nothing verified
-exit status 3

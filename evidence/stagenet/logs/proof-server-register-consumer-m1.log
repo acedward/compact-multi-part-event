@@ -1,3 +1,0 @@
-2026-09-23T14:25:28.995330Z  INFO actix_web::middleware::logger: 127.0.0.1 POST /check HTTP/1.1; took 0.000481s
-2026-09-23T14:25:31.576869Z  INFO actix_web::middleware::logger: 127.0.0.1 POST /prove HTTP/1.1; took 1.731859s
-2026-09-23T14:25:32.368946Z  INFO actix_web::middleware::logger: 127.0.0.1 POST /prove HTTP/1.1; took 0.255973s
