@@ -48,11 +48,7 @@ The key words **MUST**, **MUST NOT**, **REQUIRED**, **SHOULD**, **SHOULD NOT**, 
 
 An **adopting protocol** opts an event into this rule. A **publisher** emits the events. A **reader** reconstructs their **transport package**. A **part** is the 256-byte payload of one matching applied `Misc` event. A transport package is the ordered concatenation of one or more parts.
 
-### 2. Prerequisite
-
-[MIP 0002](https://github.com/midnightntwrk/midnight-improvement-proposals/blob/main/mips/mip-0002-public-contract-log-emission.md) MUST be implemented.
-
-### 3. Opting in
+### 2. Opting in
 
 The adopting protocol MUST identify:
 
@@ -65,13 +61,13 @@ This rule begins only after exact contract and event-name filtering of valid, de
 
 For every nonempty group in scope, the only result defined here is an accepted transport package. This proposal does not define an application schema, application validity, authorization, signatures, truth, or semantic replay policy. An adopting protocol may consume arbitrary bytes and need not define any of those concepts.
 
-### 4. Reconstructing packages
+### 3. Reconstructing packages
 
 For one opted-in chain, contract address, and event name, matching events from the same included transaction and the same physical intent form one group. Each nonempty group produces one package. A reader MUST follow ledger emission order, take each event's full 256-byte payload exactly once, and concatenate the payloads in that order. It MUST preserve every byte, including trailing zeros.
 
 Events from different chains, contract addresses, event names, physical intents, or included transactions MUST NOT be joined, even when their caller or payload bytes are equal. Zero matching events produce no package. One matching event produces a one-part package. Several events that a publisher intended as separate messages still produce one package when they are in the same group; this rule carries no hidden sub-boundary. The package length is 256 times its number of events, and the original unpadded application length cannot be recovered from this transport alone.
 
-### 5. Publisher requirements and atomicity
+### 4. Publisher requirements and atomicity
 
 All matching events that a publisher places in the same physical intent would form one package when applied, even if the publisher regards them as separate logical messages. The publisher MUST place all of those events in one execution phase. It MUST preserve the intended byte order when it emits them. The parts MAY be produced by one call or several calls, and a call MAY emit more than one matching event.
 
