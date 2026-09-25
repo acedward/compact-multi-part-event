@@ -46,16 +46,14 @@ The key words **MUST**, **MUST NOT**, **REQUIRED**, **SHOULD**, **SHOULD NOT**, 
 
 ### 1. Scope and terminology
 
-An **adopting protocol** opts an event into this rule. A **publisher** emits the events. A **reader** reconstructs their **transport package**. A **part** is the 256-byte payload of one matching applied `Misc` event. A transport package is the ordered concatenation of one or more parts.
+An **adopting protocol** opts an event name into this rule. A **publisher** emits the events. A **reader** reconstructs their **transport package**. A **part** is the 256-byte payload of one matching applied `Misc` event. A transport package is the ordered concatenation of one or more parts.
 
 ### 2. Opting in
 
-The adopting protocol MUST identify:
+The chain and contract address come from the deployed contract instance. The adopting protocol MUST declare:
 
-1. **Chain:** the exact chain identifier. The protocol SHOULD use the same chain identifier that it uses for ordinary single-part events.
-2. **Contract address:** the emitting contract address.
-3. **Event name:** the exact value of the existing `Misc` `name` field, shared by every part. This rule defines no new event name, identifier, or encoding.
-4. **Multipart rule:** `mip-xxxx:multi-part[v1]`.
+1. **Event name:** the exact value of the existing `Misc` `name` field, shared by every part. This rule defines no new event name, identifier, or encoding.
+2. **Multipart rule:** `mip-xxxx:multi-part[v1]`.
 
 This rule begins only after exact contract and event-name filtering of valid, decoded, applied events. If a protocol has not made that opt-in, this proposal has no effect on its events. Invalid envelopes, unsupported decoders, incomplete API responses, conflicting upstream deliveries, and unavailable history are outside this rule's input boundary.
 
@@ -63,7 +61,7 @@ For every nonempty group in scope, the only result defined here is an accepted t
 
 ### 3. Reconstructing packages
 
-For one opted-in chain, contract address, and event name, matching events from the same included transaction and the same physical intent form one group. Each nonempty group produces one package. A reader MUST follow ledger emission order, take each event's full 256-byte payload exactly once, and concatenate the payloads in that order. It MUST preserve every byte, including trailing zeros.
+For a deployed contract instance and an opted-in event name, matching events from the same included transaction and the same physical intent form one group. Each nonempty group produces one package. A reader MUST follow ledger emission order, take each event's full 256-byte payload exactly once, and concatenate the payloads in that order. It MUST preserve every byte, including trailing zeros.
 
 Events from different chains, contract addresses, event names, physical intents, or included transactions MUST NOT be joined, even when their caller or payload bytes are equal. Zero matching events produce no package. One matching event produces a one-part package. Several events that a publisher intended as separate messages still produce one package when they are in the same group; this rule carries no hidden sub-boundary. The package length is 256 times its number of events, and the original unpadded application length cannot be recovered from this transport alone.
 
