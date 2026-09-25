@@ -3,9 +3,10 @@
 # needs to build, check, use and verify it; nothing else).
 #
 # 1. The reserved three-letter proposal label in upper case (ASCII bytes 4d 49 50)
-#    appears in no path and no file content (binary files included), except the
-#    proposal draft next to the README (${DRAFT}), which is named after the label and
-#    uses it throughout. Commit messages never carry the label.
+#    appears in no path and no file content (binary files included), except the two
+#    documents that name the proposal: README.md (the standard's name) and the proposal
+#    draft next to it (${DRAFT}), which is named after the label. Commit messages never
+#    carry the label.
 # 2. The lower-case placeholder of the standard's name appears only in README.md and the
 #    proposal draft.
 # 3. Every path (tracked, or untracked and not ignored) is one the layout allows, and
@@ -20,8 +21,10 @@ cd "$(dirname "$0")/.."
 
 upper=$'\x4d\x49\x50'
 placeholder="$(printf 'mi%s-xxxx' 'p')"
-# The proposal draft: the one file that may carry the label, in its name and content.
+# The proposal draft, named after the label.
 DRAFT="${upper}-SPEC-DRAFT.md"
+# The documents that name the proposal: the only files that may carry the label.
+LABEL_ALLOWED=("README.md" "${DRAFT}")
 PLACEHOLDER_ALLOWED=("README.md" "${DRAFT}")
 
 # The layout: fixed files (all required) ...
@@ -92,6 +95,12 @@ while IFS= read -r -d '' file; do
   [[ -f "${file}" ]] && files+=("${file}")
 done < <(git ls-files -z --cached --others --exclude-standard)
 
+label_allowed() {
+  local file="$1" name
+  for name in "${LABEL_ALLOWED[@]}"; do [[ "${file}" == "${name}" ]] && return 0; done
+  return 1
+}
+
 in_layout() {
   local file="$1" fixed pattern
   for fixed in "${FIXED[@]}"; do [[ "${file}" == "${fixed}" ]] && return 0; done
@@ -104,7 +113,7 @@ for file in "${files[@]}"; do
     echo "outside the repository layout: ${file}" >&2
     status=1
   fi
-  if [[ "${file}" != "${DRAFT}" ]]; then
+  if ! label_allowed "${file}"; then
     if [[ "${file}" == *"${upper}"* ]]; then
       echo "reserved label in path: ${file}" >&2
       status=1
@@ -135,7 +144,7 @@ if [[ "${1:-}" == "--history" ]] && git rev-parse --verify HEAD >/dev/null 2>&1;
   while read -r object type path; do
     [[ "${type}" == "blob" ]] || continue
     blobs=$((blobs + 1))
-    [[ "${path}" == "${DRAFT}" ]] && continue
+    label_allowed "${path}" && continue
     if git cat-file blob "${object}" | LC_ALL=C grep -q -a -F -- "${upper}"; then
       echo "reserved label in history blob ${object} (${path})" >&2
       status=1

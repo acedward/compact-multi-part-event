@@ -1,12 +1,10 @@
-# compact-multi-segment-emit
+# MIP-xxxx Multi-Part Event
 
 ## Summary
 
-`mip-xxxx:multi-part[v1]` (short: `mip-xxxx`) lets a Midnight protocol publish an event larger than one `Misc` payload. It is an opt-in processing rule for an event the protocol already emits, not a new event: it defines no event name, no field and no bytes on chain. A protocol whose contracts emit `Misc` events named N states in its own specification that N follows `mip-xxxx:multi-part[v1]`; every reader then merges all N events one contract emitted from one intent of one transaction, in emission order, into one payload, and processes that payload exactly as it processes a normal N event.
+MIP-xxxx Multi-Part Event, cited by adopters as `mip-xxxx:multi-part[v1]` (short: `mip-xxxx`), lets a Midnight protocol publish an event larger than one `Misc` payload. It is an opt-in processing rule for an event the protocol already emits, not a new event: it defines no event name, no field and no bytes on chain. A protocol whose contracts emit `Misc` events named N states in its own specification that N follows `mip-xxxx:multi-part[v1]`; every reader then merges all N events one contract emitted from one intent of one transaction, in emission order, into one payload, and processes that payload exactly as it processes a normal N event. This repository, `compact-multi-segment-emit`, is its reference implementation.
 
 For example, if the protocol `mip-9931` emits `mip-9931:cool-beans[v1]` and opts in, an intent that holds three `mip-9931:cool-beans[v1]` events is one cool-beans event whose payload is their 768 bytes, and an intent that holds one is processed exactly as before.
-
-Targets Midnight 2.x (ledger v9, stagenet's ledger 9.1) and Compact 0.34.0. This is a draft: `xxxx` is an unassigned placeholder until the proposal is published, and the repository carries only version 1. The idea of publishing one event in several parts comes from SIG Network (https://sig.network).
 
 ## How to use
 
@@ -139,3 +137,7 @@ The indexer has no name filter: a reader pages through `contractEvents(filter: {
 - The payload's integrity and meaning are the adopter's: length, type and checksum belong to P's format.
 - A proof server sees every witness, the access-control secret included: prove locally. `deploy-tools` accepts only a loopback proof server unless told otherwise, and takes secrets as file paths only (mode 0600, outside every Git working tree).
 - `verify` trusts the indexer for the events and the state; `--node` checks the raw transaction against the node's block.
+
+---
+
+Targets Midnight 2.x (ledger v9, stagenet's ledger 9.1) and Compact 0.34.0. This is a draft: `xxxx` is an unassigned placeholder until the proposal is published, and the repository carries only version 1. The idea of publishing one event in several parts comes from SIG Network (https://sig.network).

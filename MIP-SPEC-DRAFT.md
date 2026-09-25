@@ -1,6 +1,6 @@
 ---
 MIP: xxxx
-Title: Multi-Part Contract Events (`mip-xxxx:multi-part[v1]`)
+Title: Multi-Part Event (`mip-xxxx:multi-part[v1]`)
 Authors:
   - Edward Alvarado <edward.alvarado@midnight.foundation>
 Status: Draft
@@ -31,7 +31,7 @@ License: Apache-2.0
 ## Drafting notes (remove before submitting)
 
 - **State:** OUTLINE: titles, subtitles and key points only; no prose yet. Created 2026-09-24.
-- **Target:** a PR to [midnightntwrk/midnight-improvement-proposals](https://github.com/midnightntwrk/midnight-improvement-proposals) adding `mips/mip-xxxx-multi-part.md` with status Draft.
+- **Target:** a PR to [midnightntwrk/midnight-improvement-proposals](https://github.com/midnightntwrk/midnight-improvement-proposals) adding `mips/mip-xxxx-multi-part-event.md` with status Draft.
 - **Sources:**
   - the "Spec" section of this repository's [README](README.md), as of `ba9710b`;
   - the maintainers' approved specification and research notes on placement and indexer filtering (not in this repository);
