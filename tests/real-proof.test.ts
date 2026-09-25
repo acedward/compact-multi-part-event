@@ -4,7 +4,10 @@
  *   ZK_ARTIFACTS_DIR   directory with keys/ and zkir/ for emitPart (npm run compile:zk →
  *                      build/zk/emitter); its verifier key must equal the committed one
  * Optional: PROVE_LIMIT_AT=33,34 proves those part counts and reports whether the
- * default cost check accepts them (the block fit; several minutes each).
+ * default cost check accepts them (the block fit; a few minutes each).
+ * PROVE_LIMIT_PARAMETERS=<hex> (serialized ledger parameters, e.g. a network's: the
+ * indexer's `block { ledgerParameters }`) also reports every normalized cost dimension
+ * of those proven transactions under those parameters, and whether they fit.
  *
  * The local ledger applies the proven transactions with balancing and signatures
  * relaxed. It does not verify proofs (the published wasm build cannot), and this test
@@ -242,6 +245,9 @@ describe.skipIf(!enabled)("real proofs through the publisher, finalize and submi
     .split(",")
     .map((value) => Number(value.trim()))
     .filter((value) => Number.isInteger(value) && value > 0);
+  const givenHex = (process.env.PROVE_LIMIT_PARAMETERS ?? "").trim();
+  const givenParameters =
+    givenHex === "" ? undefined : ledger.LedgerParameters.deserialize(Buffer.from(givenHex, "hex"));
 
   it.skipIf(limitAt.length === 0)(
     "block fit: proves N parts and reports whether the default cost check accepts them",
@@ -309,6 +315,17 @@ describe.skipIf(!enabled)("real proofs through the publisher, finalize and submi
         } else {
           expect(outcome.error).toMatch(/^after proving: /);
         }
+        const underGivenParameters = (() => {
+          if (givenParameters === undefined) return undefined;
+          try {
+            const normalized = {
+              ...givenParameters.normalizeFullness(bound.cost(givenParameters, true)),
+            };
+            return { fits: Object.values(normalized).every((value) => value <= 1), normalized };
+          } catch (error) {
+            return { fits: false, error: error instanceof Error ? error.message : String(error) };
+          }
+        })();
         record("real-proof-limit", {
           parts,
           fits: outcome.fits,
@@ -316,6 +333,7 @@ describe.skipIf(!enabled)("real proofs through the publisher, finalize and submi
           finalizeMs: Math.round(finalizeMs),
           provenBoundBytes: bound.serialize().byteLength,
           normalizedBlockUsage: blockUsage,
+          ...(underGivenParameters === undefined ? {} : { underGivenParameters }),
         });
       }
     },

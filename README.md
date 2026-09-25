@@ -105,7 +105,7 @@ Events whose protocol did not opt in are untouched. Which (contract, N) pairs op
 
 The indexer has no name filter: a reader pages through `contractEvents(filter: { contractAddress, types: [MISC] })`, at most 500 events a page, and must fetch every event of an intent before merging; the raw transaction shows a missing part. For per-segment results use the indexer's `transactionResult.segments`, not the ledger-v9 JavaScript `TransactionResult.successfulSegments`, which is inverted (`true` means failed) until ledger 10.
 
-**Limits.** A package is bounded by the block limits. For an equivalent earlier circuit the fit was about 169 parts under stagenet's parameters and about 33 under the ledger's default parameters; this repository's `emitPart` (k = 16, 41,546 rows, provisional) is measured again with real proofs. The publisher refuses a transaction that does not fit after proving and after balancing; its default cap is 8 parts, configurable up to 1,024.
+**Limits.** A package is bounded by the block limits, and block size is the dimension that binds: each part adds one call with its proof, about 5.9 KB. With real proofs of this repository's `emitPart` (k = 16, 41,546 rows, provisional), a package of 169 parts fits a block under stagenet's parameters (170 does not) and 33 under the ledger's default parameters (34 does not), measured before a wallet adds its fee-paying intent. The publisher refuses a transaction that does not fit after proving and after balancing; its default cap is 8 parts, configurable up to 1,024.
 
 **Security.**
 
