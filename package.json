@@ -2,7 +2,7 @@
   "name": "compact-multi-segment-emit",
   "version": "0.1.0",
   "private": true,
-  "description": "Publish one runtime-sized message as several Compact Misc events emitted by repeated guaranteed calls in one Midnight transaction, with an independent reader and raw-transaction verifier.",
+  "description": "Reference implementation of the multi-part processing rule for Midnight Misc events: a reader that merges one intent's events of an opted-in name into one package, and a publisher that puts all parts of a package into one guaranteed-only intent.",
   "license": "Apache-2.0",
   "type": "module",
   "engines": {
@@ -12,39 +12,27 @@
     "cmse": "dist/cli/main.js"
   },
   "exports": {
-    "./codec": {
-      "types": "./dist/codec/index.d.ts",
-      "default": "./dist/codec/index.js"
+    "./reader": {
+      "types": "./dist/reader/index.d.ts",
+      "default": "./dist/reader/index.js"
     },
-    "./codec/raw-transaction": {
-      "types": "./dist/codec/raw-transaction.d.ts",
-      "default": "./dist/codec/raw-transaction.js"
+    "./publisher": {
+      "types": "./dist/publisher/index.d.ts",
+      "default": "./dist/publisher/index.js"
     },
-    "./transaction": {
-      "types": "./dist/transaction/index.d.ts",
-      "default": "./dist/transaction/index.js"
-    },
-    "./contract": {
-      "types": "./dist/contract/index.d.ts",
-      "default": "./dist/contract/index.js"
-    },
-    "./adapters": {
-      "types": "./dist/adapters/index.d.ts",
-      "default": "./dist/adapters/index.js"
+    "./indexer": {
+      "types": "./dist/indexer/index.d.ts",
+      "default": "./dist/indexer/index.js"
     }
   },
   "files": [
     "dist",
-    "contracts/modules",
-    "contracts/emitter.compact",
-    "contracts/keys",
     "LICENSE",
-    "NOTICE"
+    "README.md"
   ],
   "scripts": {
     "compile": "scripts/compile-contracts.sh",
     "compile:zk": "scripts/compile-contracts.sh --zk",
-    "measure": "scripts/measure-circuits.sh",
     "build": "tsc -p tsconfig.build.json",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "lint": "eslint . --max-warnings=0",
@@ -53,7 +41,6 @@
     "labels": "scripts/check-labels.sh",
     "test": "vitest run",
     "test:real-proof": "vitest run tests/real-proof.test.ts",
-    "check:entrypoints": "node scripts/check-entrypoints.mjs",
     "cmse": "node dist/cli/main.js",
     "check:external-consumer": "scripts/check-external-consumer.sh",
     "check": "scripts/check.sh"

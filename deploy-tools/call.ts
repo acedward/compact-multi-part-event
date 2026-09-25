@@ -1,10 +1,9 @@
 /**
- * A transaction with ONE guaranteed call to a contract circuit, for the steps around a
- * publication: the optional registration (`register<N>`, which must be its own,
- * earlier transaction), an owner-only release, or an application circuit.
+ * A transaction with ONE guaranteed call to a contract circuit, for an example's
+ * state-changing circuit (the notice board's `pin`).
  *
- * Unlike the parts of a publication, such a call may write contract state, so it is
- * never batched with parts executed from the same pre-state.
+ * Unlike the parts of a package, such a call may write contract state, so it is never
+ * batched with parts executed from the same pre-state.
  *
  * @module
  */
@@ -16,8 +15,8 @@ import {
 } from "@midnight-ntwrk/compact-runtime";
 import * as ledger from "@midnightntwrk/ledger-v9";
 
-import type { AnyTransaction } from "../codec/raw-transaction.js";
 import {
+  addGuaranteedIntent,
   canonicalKeyLocation,
   DEFAULT_MAX_ASSEMBLY_ATTEMPTS,
   DEFAULT_TTL_SECONDS,
@@ -25,10 +24,9 @@ import {
   type PinnedBlock,
   prePartitionCallFor,
   type PublicationStateSource,
-  retryUntilNonZeroSegment,
-  singleSegment,
-} from "./compose.js";
-import { PublicationCheckError } from "./guard.js";
+} from "../src/publisher/compose.js";
+import { PackageCheckError } from "../src/publisher/guard.js";
+import type { AnyTransaction } from "../src/reader/transaction.js";
 
 /** One circuit call to build. */
 export interface CircuitCallPlan<PS> {
@@ -39,7 +37,7 @@ export interface CircuitCallPlan<PS> {
   readonly circuit: string;
   /** The submitting wallet's coin public key. */
   readonly coinPublicKey: string;
-  /** Runs the generated circuit, e.g. `(ctx) => contract.impureCircuits.register3(ctx, id, tails)`. */
+  /** Runs the generated circuit, e.g. `(ctx) => contract.impureCircuits.pin(ctx, digest)`. */
   readonly execute: (context: CircuitContext<PS>) => Promise<CircuitResults<PS, unknown>>;
   /** Private state answering the circuit's witnesses. */
   readonly privateState: PS;
@@ -66,7 +64,7 @@ const entryPointText = (entryPoint: string | Uint8Array): string =>
  * Execute one circuit against the state at the latest block and assemble it as one
  * guaranteed call.
  *
- * @throws {PublicationCheckError} If execution makes cross-contract calls or touches
+ * @throws {PackageCheckError} If execution makes cross-contract calls or touches
  * shielded coins (outside this helper's scope), or the circuit fails.
  */
 export const buildCircuitCallTransaction = async <PS>(
@@ -101,20 +99,20 @@ export const buildCircuitCallTransaction = async <PS>(
   const traces = result.context.callProofDataTrace;
   const [trace] = traces;
   if (traces.length !== 1 || trace === undefined) {
-    throw new PublicationCheckError("execution", `produced ${String(traces.length)} call traces`);
+    throw new PackageCheckError("execution", `produced ${String(traces.length)} call traces`);
   }
   if (trace.contractAddress !== plan.address || trace.circuitId !== plan.circuit) {
-    throw new PublicationCheckError("execution", "trace targets another contract or circuit");
+    throw new PackageCheckError("execution", "trace targets another contract or circuit");
   }
   if (trace.commCommData !== undefined) {
-    throw new PublicationCheckError("execution", "the circuit made a cross-contract call");
+    throw new PackageCheckError("execution", "the circuit made a cross-contract call");
   }
   const zswap = trace.zswapLocalState as {
     inputs?: readonly unknown[];
     outputs?: readonly unknown[];
   };
   if ((zswap.inputs?.length ?? 0) > 0 || (zswap.outputs?.length ?? 0) > 0) {
-    throw new PublicationCheckError("execution", "the circuit touched shielded coins");
+    throw new PackageCheckError("execution", "the circuit touched shielded coins");
   }
   const keyLocation = (plan.keyLocation ?? canonicalKeyLocation)({
     address: plan.address,
@@ -122,19 +120,15 @@ export const buildCircuitCallTransaction = async <PS>(
     verifierKey,
   });
   const ttl = new Date((block.timestampSeconds + (plan.ttlSeconds ?? DEFAULT_TTL_SECONDS)) * 1000);
-  const assembled = retryUntilNonZeroSegment(
-    () =>
-      ledger.Transaction.fromPartsRandomized(plan.network).addCalls(
-        { tag: "guaranteedOnly" },
-        [prePartitionCallFor(trace, ledgerState, keyLocation)],
-        snapshot.ledgerParameters,
-        ttl,
-      ),
-    singleSegment,
+  const assembled = addGuaranteedIntent(
+    ledger.Transaction.fromPartsRandomized(plan.network),
+    () => [prePartitionCallFor(trace, ledgerState, keyLocation)],
+    snapshot.ledgerParameters,
+    ttl,
     DEFAULT_MAX_ASSEMBLY_ATTEMPTS,
   );
   const built: BuiltCall = {
-    transaction: assembled.value,
+    transaction: assembled.transaction,
     address: plan.address,
     circuit: plan.circuit,
     segment: assembled.segment,
@@ -155,7 +149,7 @@ export const callIntentCheck =
   (built: Pick<BuiltCall, "address" | "circuit" | "segment">) =>
   (tx: AnyTransaction, stage: string): void => {
     const fail = (detail: string): never => {
-      throw new PublicationCheckError(stage, detail);
+      throw new PackageCheckError(stage, detail);
     };
     const intent = tx.intents?.get(built.segment);
     if (intent === undefined) return fail(`no intent at segment ${String(built.segment)}`);

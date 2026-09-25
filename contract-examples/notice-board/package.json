@@ -1,8 +1,8 @@
 {
-  "name": "consumer-board-example",
+  "name": "notice-board-example",
   "version": "0.1.0",
   "private": true,
-  "description": "Consumer example: a notice board contract that reuses MultiSegmentEmit and MessageRegistry through the library's public entry points.",
+  "description": "Notice-board example: a second adopter of the multi-part rule, with state of its own, using the library's public entry points.",
   "license": "Apache-2.0",
   "type": "module",
   "scripts": {

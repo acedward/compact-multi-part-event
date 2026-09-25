@@ -17,7 +17,7 @@ import {
   parseSha256Sums,
   readVerifierKey,
   zkConfigForContract,
-} from "../src/adapters/zk-config.js";
+} from "../deploy-tools/zk-config.js";
 import { EMITTER_VERIFIER_KEY, repoFile } from "./helpers/generated.js";
 
 const sha = (bytes: Uint8Array): string => createHash("sha256").update(bytes).digest("hex");
@@ -40,7 +40,7 @@ describe("artifact hashes", () => {
   it("parses the committed SHA256SUMS of the reference emitter", async () => {
     const { readFileSync } = await import("node:fs");
     const sums = parseSha256Sums(
-      readFileSync(repoFile("contracts/keys/emitter/SHA256SUMS"), "utf8"),
+      readFileSync(repoFile("contract-examples/emitter/keys/SHA256SUMS"), "utf8"),
     );
     expect([...sums.keys()].sort()).toEqual([
       "keys/emitPart.prover",

@@ -1,10 +1,11 @@
 /**
- * Wallet adapter, offline parts: reading the mnemonic from a protected file (word count,
+ * deploy-tools' wallet, offline parts: reading the mnemonic from a protected file (word count,
  * checksum, file mode; no word ever in an error), HD derivation (deterministic, three
  * distinct roles, network-specific addresses), a public identity that contains no
  * secret material, and the fee margin of the wallet facade's configuration (default 5
  * blocks, 0..100, checked before the mnemonic is read, passed to `WalletFacade.init`).
- * Syncing and transacting need a live network (P3).
+ * Syncing and transacting need a live network. The `funding` command's output test
+ * moved to tests/cli-commands.test.ts with the rest of the parked CLI (plan P1-B).
  *
  * The mnemonic used here is the public all-"abandon" test phrase that SDK test kits
  * ship; it holds no funds and is never used against a network.
@@ -18,7 +19,7 @@ import { WalletFacade } from "@midnightntwrk/wallet-sdk-facade";
 import { mnemonicToSeedSync } from "@scure/bip39";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-import { SecretFileError } from "../src/adapters/secrets.js";
+import { SecretFileError } from "../deploy-tools/secrets.js";
 import {
   DEFAULT_FEE_BLOCKS_MARGIN,
   deriveWalletKeys,
@@ -27,8 +28,7 @@ import {
   walletFacadeConfiguration,
   type WalletNetwork,
   WalletSession,
-} from "../src/adapters/wallet.js";
-import { runFunding } from "../src/cli/commands.js";
+} from "../deploy-tools/wallet.js";
 
 const WORDS = `${"abandon ".repeat(23)}diesel`;
 
@@ -106,40 +106,6 @@ describe("key derivation and public identity", () => {
     expect(text).not.toContain(seedHex.slice(0, 32));
     expect(text).not.toContain(keys.unshieldedKeystore.getSecretKey().toString("hex").slice(0, 32));
     expect(text).not.toContain("abandon");
-  });
-
-  it("funding prints only the public identity and balances", async () => {
-    const lines: string[] = [];
-    const report = await runFunding(
-      {
-        identity,
-        balances: () =>
-          Promise.resolve({
-            night: 5_000_000_000n,
-            dust: 12n,
-            shielded: {},
-            nightUtxos: [
-              {
-                value: 5_000_000_000n,
-                intentHash: "ab".repeat(32),
-                outputNo: 0,
-                ctime: "2026-09-23T00:00:00.000Z",
-                registeredForDustGeneration: false,
-              },
-            ],
-          }),
-        registerForDust: (mode) => Promise.resolve({ mode, unregistered: 1, fee: 7n }),
-      },
-      { registerDust: "estimate" },
-      (line) => lines.push(line),
-    );
-    const output = lines.join("\n");
-    expect(output).toContain(identity.unshieldedAddress);
-    expect(output).toContain("NIGHT              5000000000 STAR (1 UTxO)");
-    expect(output).toContain("DUST registration  estimate: 1 unregistered UTxO, fee 7 SPECK");
-    expect(output).not.toContain("abandon");
-    expect(output).not.toContain(keys.unshieldedKeystore.getSecretKey().toString("hex"));
-    expect(report.dustRegistration?.fee).toBe(7n);
   });
 });
 

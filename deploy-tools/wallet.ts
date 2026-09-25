@@ -50,7 +50,7 @@ import {
 import { mnemonicToSeedSync, validateMnemonic } from "@scure/bip39";
 import { wordlist as english } from "@scure/bip39/wordlists/english.js";
 
-import type { PublicationBalancer, PublicationSubmitter } from "../transaction/finalize.js";
+import type { PublicationBalancer, PublicationSubmitter } from "../src/publisher/finalize.js";
 import { readProtectedFile, SecretFileError } from "./secrets.js";
 import {
   loadWalletCache,

@@ -28,8 +28,8 @@ import {
   WALLET_CACHE_SDK,
   WalletCacheError,
   type WalletCacheIdentity,
-} from "../src/adapters/wallet-cache.js";
-import { deriveWalletKeys, publicIdentity } from "../src/adapters/wallet.js";
+} from "../deploy-tools/wallet-cache.js";
+import { deriveWalletKeys, publicIdentity } from "../deploy-tools/wallet.js";
 
 const WORDS = `${"abandon ".repeat(23)}diesel`;
 const identity: WalletCacheIdentity = publicIdentity(

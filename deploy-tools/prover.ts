@@ -24,7 +24,7 @@ import { httpClientProvingProvider } from "@midnight-ntwrk/midnight-js-http-clie
 import type { ZKConfigProvider, ZKConfigRegistry } from "@midnight-ntwrk/midnight-js-types";
 import * as ledger from "@midnightntwrk/ledger-v9";
 
-import type { PublicationProver } from "../transaction/finalize.js";
+import type { PublicationProver } from "../src/publisher/finalize.js";
 
 /** A proven transaction waiting for the wallet to bind it. */
 export type ProvenTransaction = ledger.Transaction<

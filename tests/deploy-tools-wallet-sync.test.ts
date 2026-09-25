@@ -19,7 +19,7 @@ import {
   syncProgressOf,
   waitForCompleteSync,
   WalletNotSyncedError,
-} from "../src/adapters/wallet-sync.js";
+} from "../deploy-tools/wallet-sync.js";
 
 const WORDS = `${"abandon ".repeat(23)}diesel`;
 const SECRET = "5ec12e7a11d0ea51c0ffee5ec12e7a11d0ea51c0ffee5ec12e7a11d0ea51c0ff";

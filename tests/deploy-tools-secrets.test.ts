@@ -26,7 +26,7 @@ import {
   SecretFileError,
   writeSecretFile,
   writeSigningKeyFile,
-} from "../src/adapters/secrets.js";
+} from "../deploy-tools/secrets.js";
 
 let dir: string;
 let previousUmask: number;

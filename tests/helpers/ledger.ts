@@ -1,9 +1,8 @@
 /**
- * In-process ledger-v9 harness (ported from the prototype soundness audit, section
- * B): a blank `LedgerState`, real `ContractDeploy` transactions, and
- * `wellFormed` + `LedgerState.apply` with balancing, signatures and contract proofs
- * relaxed (no wallet or DUST here; the published wasm build does not verify contract
- * proofs anyway, so nothing here claims to).
+ * In-process ledger-v9 harness: a blank `LedgerState`, real `ContractDeploy`
+ * transactions, and `wellFormed` + `LedgerState.apply` with balancing, signatures and
+ * contract proofs relaxed (no wallet or DUST here; the published wasm build does not
+ * verify contract proofs anyway, so nothing here claims to).
  */
 import {
   type CallProofData,
@@ -12,20 +11,28 @@ import {
 } from "@midnight-ntwrk/compact-runtime";
 import * as ledger from "@midnightntwrk/ledger-v9";
 
-import { emitterAuthorityOf, type EmitterPrivateState } from "../../src/contract/index.js";
+import {
+  emitterAuthorityOf,
+  type EmitterPrivateState,
+} from "../../contract-examples/whitelist/whitelist.js";
 import {
   bindingFromContract,
   canonicalKeyLocation,
   type EmissionBinding,
-  type PublicationConfig,
+  ledgerQueryContext,
+  type PackageRequest,
   type PublicationStateSource,
-} from "../../src/transaction/index.js";
-import type { AnyTransaction } from "../../src/codec/raw-transaction.js";
+  type PublisherConfig,
+} from "../../src/publisher/index.js";
+import type { AnyTransaction } from "../../src/reader/index.js";
 import {
   COIN_PUBLIC_KEY,
   EMITTER_VERIFIER_KEY,
   emitterContract,
   emitterInitialState,
+  EXAMPLE_NAME,
+  openEmitterContract,
+  openEmitterInitialState,
 } from "./generated.js";
 
 export const NETWORK = "cmse-local";
@@ -146,58 +153,90 @@ export const deploy = (chain: LocalChain, runtimeState: RuntimeContractState): s
   return contractDeploy.address;
 };
 
-/** Deploy the reference emitter with the committed verifier key for `secret`'s authority. */
-export const deployEmitter = async (chain: LocalChain, secret: Uint8Array): Promise<string> => {
-  const state = await emitterInitialState(emitterAuthorityOf(secret));
+const withKey = (state: RuntimeContractState, key: Uint8Array): RuntimeContractState => {
   const operation = state.operation("emitPart");
   if (operation === undefined) throw new Error("no emitPart operation");
-  operation.verifierKey = EMITTER_VERIFIER_KEY;
+  operation.verifierKey = key;
   state.setOperation("emitPart", operation);
-  return deploy(chain, state);
+  return state;
 };
+
+/** Deploy the reference emitter with the committed verifier key for `secret`'s authority. */
+export const deployEmitter = async (chain: LocalChain, secret: Uint8Array): Promise<string> =>
+  deploy(
+    chain,
+    withKey(await emitterInitialState(emitterAuthorityOf(secret)), EMITTER_VERIFIER_KEY),
+  );
+
+/**
+ * Deploy the test-only open emitter. It has no committed key: the reference emitter's
+ * key stands in (proofs are erased here and the local ledger does not verify them).
+ */
+export const deployOpenEmitter = async (chain: LocalChain): Promise<string> =>
+  deploy(chain, withKey(await openEmitterInitialState(), EMITTER_VERIFIER_KEY));
 
 export const emitterBinding = (secret: Uint8Array): EmissionBinding<EmitterPrivateState> =>
   bindingFromContract(emitterContract(), "emitPart", () => ({ emitterSecret: secret }));
 
-export const configFor = (
-  emitter: string,
-  overrides: Partial<PublicationConfig> = {},
-): PublicationConfig => ({
+export const openBinding = (): EmissionBinding<undefined> =>
+  bindingFromContract(openEmitterContract(), "emitPart", () => undefined);
+
+export const configFor = (overrides: Partial<PublisherConfig> = {}): PublisherConfig => ({
   network: NETWORK,
-  emitter,
   coinPublicKey: COIN_PUBLIC_KEY,
   ...overrides,
 });
 
-/** Execute one emitter part directly (for hand-assembled test transactions). */
-export const emitterTrace = async (
+/** A package request for the reference emitter's name. */
+export const requestFor = <PS>(
+  contract: string,
+  binding: EmissionBinding<PS>,
+  parts: readonly Uint8Array[],
+  name: string | Uint8Array = EXAMPLE_NAME,
+): PackageRequest<PS> => ({ contract, name, binding, parts });
+
+/** Execute one `emitPart` directly (for hand-assembled test transactions). */
+export const traceOf = async <PS>(
   chain: LocalChain,
-  emitter: string,
-  secret: Uint8Array,
-  requestId: Uint8Array,
-  tail: Uint8Array,
+  contract: string,
+  binding: EmissionBinding<PS>,
+  payload: Uint8Array,
 ): Promise<CallProofData> => {
-  const state = chain.state.index(emitter);
-  if (state === undefined) throw new Error("emitter missing");
-  const result = await emitterContract().circuits.emitPart(
+  const state = chain.state.index(contract);
+  if (state === undefined) throw new Error("contract missing");
+  const result = await binding.emitPart(
     createCircuitContext(
       "emitPart",
-      emitter,
+      contract,
       COIN_PUBLIC_KEY,
       RuntimeContractState.deserialize(state.serialize()),
-      { emitterSecret: secret },
+      binding.createPrivateState(),
       undefined,
       undefined,
       undefined,
       chain.seconds,
       chain.parentBlockHash,
     ),
-    requestId,
-    tail,
+    payload,
   );
   const [trace] = result.context.callProofDataTrace;
   if (trace === undefined) throw new Error("no trace");
   return trace;
+};
+
+/** The guaranteed-only transcript of one executed call, as `addCalls` partitions it. */
+export const guaranteedTranscript = (
+  chain: LocalChain,
+  trace: CallProofData,
+): ledger.Transcript<ledger.AlignedValue> => {
+  const [pair] = ledger.partitionTranscripts(
+    [new ledger.PreTranscript(ledgerQueryContext(trace), trace.publicTranscript)],
+    chain.state.parameters,
+  );
+  if (pair === undefined || pair[0] === undefined || pair[1] !== undefined) {
+    throw new Error("expected a guaranteed-only partition");
+  }
+  return pair[0];
 };
 
 export interface CallSpec {
@@ -206,22 +245,22 @@ export interface CallSpec {
   readonly fallible?: ledger.Transcript<ledger.AlignedValue> | undefined;
 }
 
-/** One intent at `segment` holding the given calls (already partitioned transcripts). */
+/** One intent at `segment` holding the given `emitPart` calls (already partitioned transcripts). */
 export const assembleIntent = (
   chain: LocalChain,
-  emitter: string,
+  contract: string,
   segment: number,
   specs: readonly CallSpec[],
 ): ledger.UnprovenTransaction => {
-  const state = chain.state.index(emitter);
-  if (state === undefined) throw new Error("emitter missing");
+  const state = chain.state.index(contract);
+  if (state === undefined) throw new Error("contract missing");
   let intent = ledger.Intent.new(new Date(chain.time.getTime() + 10 * 60 * 1000));
   for (const spec of specs) {
     const operation = state.operation("emitPart");
     if (operation === undefined) throw new Error("no operation");
     intent = intent.addCall(
       new ledger.ContractCallPrototype(
-        emitter,
+        contract,
         "emitPart",
         operation,
         spec.guaranteed,
@@ -231,7 +270,7 @@ export const assembleIntent = (
         spec.trace.output,
         ledger.communicationCommitmentRandomness(),
         canonicalKeyLocation({
-          address: emitter,
+          address: contract,
           entryPoint: "emitPart",
           verifierKey: operation.verifierKey,
         }),
@@ -242,6 +281,22 @@ export const assembleIntent = (
     { tag: "specific", value: segment },
     intent,
   );
+};
+
+/** An intent at `segment` whose guaranteed-only calls emit `payloads`, in order. */
+export const intentAt = async <PS>(
+  chain: LocalChain,
+  contract: string,
+  binding: EmissionBinding<PS>,
+  segment: number,
+  payloads: readonly Uint8Array[],
+): Promise<ledger.UnprovenTransaction> => {
+  const specs: CallSpec[] = [];
+  for (const payload of payloads) {
+    const trace = await traceOf(chain, contract, binding, payload);
+    specs.push({ trace, guaranteed: guaranteedTranscript(chain, trace) });
+  }
+  return assembleIntent(chain, contract, segment, specs);
 };
 
 /** Guaranteed transcripts of the calls in the intent at `segment`. */
@@ -264,7 +319,7 @@ export const starve = (
   gas: { ...transcript.gas, computeTime: 1n },
 });
 
-/** Flip one byte of the logged event value inside a transcript (after the prefix). */
+/** Flip one byte of the logged event value inside a transcript (in the payload by default). */
 export const tamperTranscript = (
   transcript: ledger.Transcript<ledger.AlignedValue>,
   byteIndex = 100,

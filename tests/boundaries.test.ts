@@ -1,13 +1,15 @@
 /**
- * Dependency boundaries (spec "Standalone repository content and dependency
- * boundaries"), checked on the source import graph:
- * - the codec entry point reaches only Node built-ins and codec modules (no ledger,
- *   wallet, network, prover or generated contract code);
- * - no production module imports tests, examples, generated contract output, or a
- *   test runner;
- * - the transaction module does not import a generated `Contract`.
+ * Dependency boundaries, checked on the source import graph:
+ * - the reader reaches only the ledger package and its own modules (no runtime, wallet,
+ *   network, prover or generated contract code);
+ * - the publisher reaches only the ledger, the runtime, Node built-ins, the reader and
+ *   its own modules;
+ * - no library module (`src/reader`, `src/publisher`, `src/indexer`) reaches tests,
+ *   examples, deploy-tools, generated output or a test runner;
+ * - the notice-board example imports only the library's public entry points, the
+ *   runtime and ledger packages, Node built-ins, its own files and its own binding.
  */
-import { readFileSync } from "node:fs";
+import { readdirSync, readFileSync } from "node:fs";
 import { dirname, join, relative, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -47,49 +49,48 @@ const reachable = (entry: string): { files: Set<string>; external: Set<string> }
   return { files, external };
 };
 
-const productionEntries = [
-  "src/codec/index.ts",
-  "src/codec/raw-transaction.ts",
-  "src/transaction/index.ts",
-  "src/contract/index.ts",
-].map((path) => join(root, path));
+const rel = (files: Iterable<string>): string[] =>
+  [...files].map((file) => relative(root, file)).sort();
 
 describe("dependency boundaries", () => {
-  it("the codec entry point needs only node:crypto and codec modules", () => {
-    const { files, external } = reachable(join(root, "src/codec/index.ts"));
-    expect([...external].sort()).toEqual(["node:crypto"]);
-    for (const file of files) expect(relative(root, file).startsWith("src/codec/")).toBe(true);
-    expect([...files].map((file) => relative(root, file))).not.toContain(
-      "src/codec/raw-transaction.ts",
-    );
+  it("the reader needs only the ledger package and its own modules", () => {
+    const { files, external } = reachable(join(root, "src/reader/index.ts"));
+    expect([...external].sort()).toEqual(["@midnightntwrk/ledger-v9"]);
+    for (const file of rel(files)) expect(file.startsWith("src/reader/")).toBe(true);
   });
 
-  it("raw-transaction extraction adds only the ledger package", () => {
-    const { external } = reachable(join(root, "src/codec/raw-transaction.ts"));
-    expect([...external].sort()).toEqual(["@midnightntwrk/ledger-v9", "node:crypto"]);
-  });
-
-  it("no production module reaches tests, examples, generated output or a test runner", () => {
-    for (const entry of productionEntries) {
-      const { files, external } = reachable(entry);
-      for (const file of files) {
-        const path = relative(root, file);
-        expect(path.startsWith("src/"), `${path} (from ${relative(root, entry)})`).toBe(true);
-        expect(path).not.toMatch(/managed|tests\/|examples\//);
-      }
-      for (const specifier of external) {
-        expect(specifier).not.toMatch(/vitest|managed|contract\/index/);
-      }
-    }
-  });
-
-  it("the transaction composer depends only on the ledger, the runtime and the codec", () => {
-    const { external } = reachable(join(root, "src/transaction/index.ts"));
+  it("the publisher needs only the ledger, the runtime, Node built-ins and the reader", () => {
+    const { files, external } = reachable(join(root, "src/publisher/index.ts"));
     expect([...external].sort()).toEqual([
       "@midnight-ntwrk/compact-runtime",
       "@midnightntwrk/ledger-v9",
       "node:crypto",
       "node:util",
     ]);
+    for (const file of rel(files)) expect(file).toMatch(/^src\/(publisher|reader)\//);
+  });
+
+  it("no library module reaches tests, examples, deploy-tools, generated output or a test runner", () => {
+    for (const entry of ["src/reader/index.ts", "src/publisher/index.ts", "src/indexer/index.ts"]) {
+      const { files, external } = reachable(join(root, entry));
+      for (const path of rel(files)) {
+        expect(path.startsWith("src/"), `${path} (from ${entry})`).toBe(true);
+        expect(path).not.toMatch(/managed|tests\/|contract-examples\/|deploy-tools\/|src\/cli\//);
+      }
+      for (const specifier of external) {
+        expect(specifier).not.toMatch(/vitest|managed|wallet-sdk|midnight-js|bip39|rxjs/);
+      }
+    }
+  });
+
+  it("the notice-board example imports only public entry points, runtime/ledger, built-ins, its own files and binding", () => {
+    const dir = join(root, "contract-examples/notice-board/src");
+    const allowed =
+      /^(compact-multi-segment-emit\/(reader|publisher|indexer)|@midnight-ntwrk\/compact-runtime|@midnightntwrk\/ledger-v9|node:[a-z]+|\.\/[a-z-]+\.js|\.\.\/managed\/contract\/index\.js)$/;
+    const specifiers = readdirSync(dir)
+      .filter((file) => file.endsWith(".ts"))
+      .flatMap((file) => importsOf(join(dir, file)));
+    expect(specifiers.length).toBeGreaterThan(0);
+    expect(specifiers.filter((specifier) => !allowed.test(specifier))).toEqual([]);
   });
 });

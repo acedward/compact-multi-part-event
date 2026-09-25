@@ -641,3 +641,41 @@ describe("exit after flush (main entry)", () => {
     expect(exits).toEqual([1]);
   });
 });
+
+// Moved here from tests/deploy-tools-wallet-keys.test.ts in P1-A with the parked CLI
+// (plan P1-B ports it; it needs `WORDS`, `file`, `identity` and `keys` from that file).
+describe("funding (parked until P1-B)", () => {
+  it("funding prints only the public identity and balances", async () => {
+    const lines: string[] = [];
+    const report = await runFunding(
+      {
+        identity,
+        balances: () =>
+          Promise.resolve({
+            night: 5_000_000_000n,
+            dust: 12n,
+            shielded: {},
+            nightUtxos: [
+              {
+                value: 5_000_000_000n,
+                intentHash: "ab".repeat(32),
+                outputNo: 0,
+                ctime: "2026-09-23T00:00:00.000Z",
+                registeredForDustGeneration: false,
+              },
+            ],
+          }),
+        registerForDust: (mode) => Promise.resolve({ mode, unregistered: 1, fee: 7n }),
+      },
+      { registerDust: "estimate" },
+      (line) => lines.push(line),
+    );
+    const output = lines.join("\n");
+    expect(output).toContain(identity.unshieldedAddress);
+    expect(output).toContain("NIGHT              5000000000 STAR (1 UTxO)");
+    expect(output).toContain("DUST registration  estimate: 1 unregistered UTxO, fee 7 SPECK");
+    expect(output).not.toContain("abandon");
+    expect(output).not.toContain(keys.unshieldedKeystore.getSecretKey().toString("hex"));
+    expect(report.dustRegistration?.fee).toBe(7n);
+  });
+});

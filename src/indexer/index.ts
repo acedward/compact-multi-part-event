@@ -1,19 +1,21 @@
 /**
- * Public-data adapter for the Midnight indexer's GraphQL v4 API (tested against
+ * Public-indexer client for the Midnight indexer's GraphQL v4 API (tested against
  * indexer 4.x at `https://indexer.stagenet.shielded.tools/api/v4/graphql`), plus an
  * optional node RPC cross-check.
  *
  * What it reads, all without a wallet:
  * - blocks (hash, height, timestamp in MILLISECONDS, serialized ledger parameters);
  * - a contract's serialized state at a block, with that block's ledger parameters, as
- *   the composer's {@link PublicationStateSource} (one latest block, then the state at
+ *   the publisher's {@link PublicationStateSource} (one latest block, then the state at
  *   exactly that block hash);
  * - a transaction by hash or by any of its identifiers: raw bytes, identifiers, status
  *   (`SUCCESS`, `PARTIAL_SUCCESS`, `FAILURE`) and block;
- * - a contract's `Misc` events, paginated (`limit` at most 500, `offset`), filtered by
- *   transaction hash. The top-level `contractEvents` query is used on purpose: the
- *   per-call event list is empty when a transaction holds several calls to one
- *   contract entry point, which is exactly a publication.
+ * - a contract's `Misc` events, paginated (`limit` at most 500, `offset`), optionally
+ *   filtered by transaction hash (the indexer has no name filter). The top-level
+ *   `contractEvents` query is used on purpose: the per-call event list is empty when a
+ *   transaction holds several calls to one contract entry point, which is exactly a
+ *   package. The `raw` ledger event carries the intent (`EventSource.physicalSegment`);
+ *   the indexer event id follows ledger emission order.
  *
  * Indexer data is trusted as served. `verify` reduces that trust by checking the raw
  * transaction bytes against the node's block ({@link rawTransactionInBlock}).
@@ -22,15 +24,15 @@
  */
 import * as ledger from "@midnightntwrk/ledger-v9";
 
-import { bytesEqual, bytesToHex, hexToBytes } from "../codec/bytes.js";
-import { publicEventsFromLedgerEvents } from "../codec/raw-transaction.js";
-import type { PublicEvent } from "../codec/reader.js";
-import { restoreIndexerMiscEvent } from "../codec/widths.js";
 import type {
   ContractSnapshot,
   PinnedBlock,
   PublicationStateSource,
-} from "../transaction/compose.js";
+} from "../publisher/compose.js";
+import { bytesEqual, bytesToHex, hexToBytes } from "../reader/bytes.js";
+import { eventValue, restoreIndexerMiscEvent } from "../reader/event.js";
+import type { PartEvent } from "../reader/packages.js";
+import { partEventsFromLedgerEvents } from "../reader/transaction.js";
 
 /** A failed indexer or node request. */
 export class PublicDataError extends Error {
@@ -432,65 +434,58 @@ export const indexerStateSource = (client: IndexerClient): PublicationStateSourc
 
 /** Reader input built from indexer events, with the problems found. */
 export interface IndexerEventConversion {
-  readonly events: PublicEvent[];
-  /** Events that could not be used or whose typed fields disagree with `raw`. */
+  readonly events: PartEvent[];
+  /**
+   * Events that could not be used (their `raw` bytes do not decode, so their intent is
+   * unknown) or whose typed fields disagree with `raw`. Any problem means a package may
+   * be incomplete: do not accept the packages of that contract and transaction.
+   */
   readonly issues: string[];
 }
 
 /**
- * Turn indexer `Misc` events into strict-reader input. The `raw` ledger event is the
- * source (it carries the entry point and the trimmed value; widths are restored); the
- * typed `name`/`payload` fields must agree with it after width restoration. An event
- * whose `raw` bytes cannot be decoded falls back to the typed fields and is reported.
+ * Turn indexer `Misc` events into reader input. The `raw` ledger event is the source:
+ * it carries the contract, the intent (`EventSource.physicalSegment`) and the trimmed
+ * value (widths are restored); the indexer event id is the position (it follows ledger
+ * emission order). The typed `name`/`payload` fields must agree with `raw` after width
+ * restoration.
  */
-export const publicEventsFromIndexer = (
+export const partEventsFromIndexer = (
   indexed: readonly IndexedMiscEvent[],
-  options: { readonly network: string; readonly emitter: string; readonly entryPoint: string },
+  options: { readonly network: string; readonly contract: string },
 ): IndexerEventConversion => {
-  const events: PublicEvent[] = [];
+  const events: PartEvent[] = [];
   const issues: string[] = [];
   for (const item of indexed) {
-    const eventId = `indexer:${String(item.id)}`;
-    let ledgerEvent: ledger.Event | undefined;
+    const label = `indexer event ${String(item.id)}`;
+    let ledgerEvent: ledger.Event;
     try {
       ledgerEvent = ledger.Event.deserialize(hexToBytes(item.rawHex));
     } catch {
-      ledgerEvent = undefined;
-    }
-    if (ledgerEvent === undefined) {
-      issues.push(`event ${eventId}: raw bytes do not decode; entry point unchecked`);
-      try {
-        const restored = restoreIndexerMiscEvent({ name: item.nameHex, payload: item.payloadHex });
-        events.push({
-          network: options.network,
-          emitter: options.emitter,
-          transactionId: item.transactionHash,
-          eventId,
-          name: restored.name,
-          payload: restored.payload,
-        });
-      } catch (error) {
-        issues.push(`event ${eventId}: ${error instanceof Error ? error.message : String(error)}`);
-      }
+      issues.push(`${label}: raw bytes do not decode; its intent is unknown`);
       continue;
     }
-    const converted = publicEventsFromLedgerEvents([ledgerEvent], {
-      ...options,
-      eventIdOf: () => eventId,
+    const converted = partEventsFromLedgerEvents([ledgerEvent], {
+      network: options.network,
+      contracts: [options.contract],
+      positionOf: () => item.id,
     });
-    issues.push(...converted.issues);
+    issues.push(...converted.issues.map((issue) => `${label}: ${issue}`));
     for (const event of converted.events) {
+      if (event.transactionHash !== item.transactionHash) {
+        issues.push(`${label}: raw transaction hash differs from the indexer's transaction`);
+      }
       try {
         const typed = restoreIndexerMiscEvent({ name: item.nameHex, payload: item.payloadHex });
-        if (!bytesEqual(typed.name, event.name) || !bytesEqual(typed.payload, event.payload)) {
-          issues.push(`event ${eventId}: typed name/payload disagree with the raw event`);
+        if (!bytesEqual(eventValue(typed.name, typed.payload), event.value)) {
+          issues.push(`${label}: typed name/payload disagree with the raw event`);
         }
       } catch (error) {
         issues.push(
-          `event ${eventId}: typed fields: ${error instanceof Error ? error.message : String(error)}`,
+          `${label}: typed fields: ${error instanceof Error ? error.message : String(error)}`,
         );
       }
-      events.push({ ...event, network: options.network, transactionId: item.transactionHash });
+      events.push(event);
     }
   }
   return { events, issues };

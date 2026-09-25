@@ -18,10 +18,10 @@ import { createHash } from "node:crypto";
 
 import * as ledger from "@midnightntwrk/ledger-v9";
 
-import { bytesEqual } from "../codec/bytes.js";
-import type { AnyTransaction } from "../codec/raw-transaction.js";
-import type { SerializableContractState } from "./compose.js";
-import { PublicationCheckError } from "./guard.js";
+import type { SerializableContractState } from "../src/publisher/compose.js";
+import { PackageCheckError } from "../src/publisher/guard.js";
+import { bytesEqual } from "../src/reader/bytes.js";
+import type { AnyTransaction } from "../src/reader/transaction.js";
 
 /** What to deploy. */
 export interface DeployPlan {
@@ -121,7 +121,7 @@ export const deployIntentCheck =
   (built: BuiltDeploy) =>
   (tx: AnyTransaction, stage: string): void => {
     const fail = (detail: string): never => {
-      throw new PublicationCheckError(stage, detail);
+      throw new PackageCheckError(stage, detail);
     };
     let found = 0;
     for (const [, intent] of tx.intents ?? []) {

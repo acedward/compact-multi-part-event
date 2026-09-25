@@ -8,10 +8,9 @@
 #                                    (empty package cache: every dependency is installed
 #                                    from the lockfile)
 #
-# Steps: golden-vector derivation (Python), then in the pinned Node image: `npm ci`
-# from the committed package-lock.json, one copy of each pinned ledger/runtime package,
-# compile, key regeneration against the committed hashes, format, lint,
-# typecheck, build, tests, codec entry point, external consumer; then the label check
+# Steps, in the pinned Node image: `npm ci` from the committed package-lock.json, one
+# copy of each pinned ledger/runtime package, compile, key regeneration against the
+# committed hashes, format, lint, typecheck, build, tests, external consumer; then the label check
 # over the working tree and the full Git history. Docker resources are named
 # ${CMSE_DOCKER_PREFIX}-* (default cmse); remove them with scripts/docker/teardown.sh.
 set -euo pipefail
@@ -36,8 +35,6 @@ if [[ "${1:-}" == "--fresh-clone" ]]; then
 fi
 
 started="$(date +%s)"
-echo "== golden vectors (independent Python derivation)"
-"${CMSE_REPO_DIR}/scripts/derive-vectors.sh" --check
 echo "== public parameters"
 "${CMSE_REPO_DIR}/scripts/docker/fetch-zk-params.sh"
 CMSE_ZK_PARAMS=1 "${CMSE_REPO_DIR}/scripts/docker/run.sh" check scripts/check-in-container.sh

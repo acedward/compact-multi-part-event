@@ -1,6 +1,3 @@
-> V2 of implementation not current code
-<img width="960" height="765" alt="Untitled drawing (1)" src="https://github.com/user-attachments/assets/7b5d4bf7-0f8d-47ac-9b19-1717ccfacb86" />
-
 # Compact multi-segment event emission
 
 This repo aims to describe a standard mechanism to publish a message of any size through

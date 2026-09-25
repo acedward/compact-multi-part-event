@@ -1,10 +1,10 @@
 /**
- * Indexer adapter against a fake GraphQL v4 indexer backed by the in-process ledger:
- * pagination of contract events (pages of 1..N, never a prefix), the event cap,
+ * Public-indexer client against a fake GraphQL v4 indexer backed by the in-process
+ * ledger: pagination of contract events (pages of 1..N, never a prefix), the event cap,
  * retries on HTTP 503 and network errors, GraphQL errors, the state source (one block,
  * state at that block, network ledger parameters, seconds), waiting through indexer
- * lag, width restoration from raw ledger events with a typed-field cross-check, and the
- * node RPC block cross-check.
+ * lag, reader input from raw ledger events (intent from `EventSource`, position from the
+ * indexer event id) with a typed-field cross-check, and the node RPC block cross-check.
  */
 import * as ledger from "@midnightntwrk/ledger-v9";
 import { beforeAll, describe, expect, it } from "vitest";
@@ -12,16 +12,31 @@ import { beforeAll, describe, expect, it } from "vitest";
 import {
   IndexerClient,
   indexerStateSource,
+  partEventsFromIndexer,
   PublicDataError,
-  publicEventsFromIndexer,
   rawTransactionInBlock,
   waitForTransaction,
-} from "../src/adapters/indexer.js";
-import { encodePublication, ReadStatus, readPublications } from "../src/codec/index.js";
-import { buildPublicationTransaction } from "../src/transaction/index.js";
-import { filled32, patternMessage } from "./helpers/bytes.js";
+} from "../src/indexer/index.js";
+import { buildPackageTransaction, splitPayload } from "../src/publisher/index.js";
+import { readPackages } from "../src/reader/index.js";
+import {
+  ascii,
+  concatBytes,
+  filled32,
+  patternMessage,
+  patternParts,
+  shortPart,
+} from "./helpers/bytes.js";
 import { FakeIndexer, type IndexedEntry } from "./helpers/fake-indexer.js";
-import { configFor, deployEmitter, emitterBinding, LocalChain, NETWORK } from "./helpers/ledger.js";
+import { EXAMPLE_NAME } from "./helpers/generated.js";
+import {
+  configFor,
+  deployEmitter,
+  emitterBinding,
+  LocalChain,
+  NETWORK,
+  requestFor,
+} from "./helpers/ledger.js";
 
 const SECRET = filled32(0x61);
 let chain: LocalChain;
@@ -29,7 +44,8 @@ let emitter: string;
 let fake: FakeIndexer;
 let first: IndexedEntry;
 let second: IndexedEntry;
-const MESSAGE = patternMessage(1000, 3);
+const FIRST_PARTS = splitPayload(patternMessage(1000, 3));
+const SECOND_PARTS = [shortPart(ascii("short"))];
 
 const client = (
   indexer: FakeIndexer,
@@ -42,16 +58,17 @@ const client = (
     ...extra,
   });
 
+const optIns = () => [{ contract: emitter, name: EXAMPLE_NAME }];
+
 beforeAll(async () => {
   chain = new LocalChain();
   emitter = await deployEmitter(chain, SECRET);
   fake = new FakeIndexer(chain);
-  for (const message of [MESSAGE, patternMessage(0)]) {
-    const built = await buildPublicationTransaction(
+  for (const parts of [FIRST_PARTS, SECOND_PARTS]) {
+    const built = await buildPackageTransaction(
       chain.source(),
-      emitterBinding(SECRET),
-      configFor(emitter),
-      encodePublication(message),
+      configFor(),
+      requestFor(emitter, emitterBinding(SECRET), parts),
     );
     const entry = fake.include(built.transaction.eraseProofs());
     if (first === undefined) first = entry;
@@ -67,7 +84,7 @@ describe("contract events", () => {
         transactionHash: first.hash,
         pageSize,
       });
-      expect(events).toHaveLength(5);
+      expect(events).toHaveLength(4);
       expect(events.map((event) => event.id)).toEqual(
         [...events.map((e) => e.id)].sort((a, b) => a - b),
       );
@@ -79,7 +96,7 @@ describe("contract events", () => {
     expect(await client(fake).miscEvents(emitter, { transactionHash: second.hash })).toHaveLength(
       1,
     );
-    expect(await client(fake).miscEvents(emitter)).toHaveLength(6);
+    expect(await client(fake).miscEvents(emitter)).toHaveLength(5);
   });
 
   it("refuses more events than the cap, and page sizes outside 1..500", async () => {
@@ -89,55 +106,66 @@ describe("contract events", () => {
     await expect(client(fake).miscEvents(emitter, { pageSize: 501 })).rejects.toThrow(RangeError);
   });
 
-  it("restores widths from the raw ledger events and reconstructs the message; the empty message too", async () => {
-    for (const [entry, message] of [
-      [first, MESSAGE],
-      [second, new Uint8Array()],
-    ] as const) {
-      const events = await client(fake).miscEvents(emitter, { transactionHash: entry.hash });
-      const converted = publicEventsFromIndexer(events, {
-        network: NETWORK,
-        emitter,
-        entryPoint: "emitPart",
-      });
-      expect(converted.issues).toEqual([]);
-      expect(converted.events.every((event) => event.name.byteLength === 32)).toBe(true);
-      expect(converted.events.every((event) => event.payload.byteLength === 256)).toBe(true);
-      const { results } = readPublications(converted.events);
-      expect(results).toHaveLength(1);
-      expect(results[0]?.status).toBe(ReadStatus.Complete);
-      expect(results[0]?.message).toEqual(message);
-    }
+  it("address only: every package of the contract, one per intent, widths restored", async () => {
+    const events = await client(fake).miscEvents(emitter);
+    const converted = partEventsFromIndexer(events, { network: NETWORK, contract: emitter });
+    expect(converted.issues).toEqual([]);
+    expect(converted.events.map((event) => event.position)).toEqual(
+      events.map((event) => event.id),
+    );
+    const { packages } = readPackages(converted.events, { optIns: optIns() });
+    expect(packages.map((pkg) => [pkg.transactionHash, pkg.parts.length])).toEqual(
+      [
+        [first.hash, 4],
+        [second.hash, 1],
+      ].sort((left, right) => (String(left[0]) < String(right[0]) ? -1 : 1)),
+    );
+    const byHash = new Map(packages.map((pkg) => [pkg.transactionHash, pkg.payload]));
+    expect(byHash.get(first.hash)).toEqual(concatBytes(FIRST_PARTS));
+    expect(byHash.get(second.hash)).toEqual(concatBytes(SECOND_PARTS));
   });
 
-  it("an entry point other than the expected one yields nothing", async () => {
-    const events = await client(fake).miscEvents(emitter, { transactionHash: first.hash });
-    const converted = publicEventsFromIndexer(events, {
-      network: NETWORK,
-      emitter,
-      entryPoint: "somethingElse",
-    });
-    expect(converted.events).toEqual([]);
+  it("delivery order does not matter: reversed pages give the same packages", async () => {
+    const events = await client(fake).miscEvents(emitter);
+    const forward = readPackages(
+      partEventsFromIndexer(events, { network: NETWORK, contract: emitter }).events,
+      {
+        optIns: optIns(),
+      },
+    );
+    const backward = readPackages(
+      partEventsFromIndexer([...events].reverse(), { network: NETWORK, contract: emitter }).events,
+      { optIns: optIns() },
+    );
+    expect(backward).toEqual(forward);
   });
 
-  it("reports typed fields that disagree with the raw event, and falls back when raw bytes do not decode", async () => {
+  it("reports typed fields that disagree with the raw event, and events whose raw bytes do not decode", async () => {
     const corruptName = new FakeIndexer(chain, { corruptTypedName: true });
     corruptName.entries.push(first);
-    const named = publicEventsFromIndexer(
+    const named = partEventsFromIndexer(
       await client(corruptName).miscEvents(emitter, { transactionHash: first.hash }),
-      { network: NETWORK, emitter, entryPoint: "emitPart" },
+      { network: NETWORK, contract: emitter },
     );
-    expect(named.issues).toHaveLength(5);
+    expect(named.issues).toHaveLength(4);
     expect(named.issues[0]).toMatch(/typed name\/payload disagree with the raw event/);
 
     const corruptRaw = new FakeIndexer(chain, { corruptRaw: true });
     corruptRaw.entries.push(first);
-    const fallback = publicEventsFromIndexer(
+    const undecodable = partEventsFromIndexer(
       await client(corruptRaw).miscEvents(emitter, { transactionHash: first.hash }),
-      { network: NETWORK, emitter, entryPoint: "emitPart" },
+      { network: NETWORK, contract: emitter },
     );
-    expect(fallback.issues[0]).toMatch(/raw bytes do not decode; entry point unchecked/);
-    expect(readPublications(fallback.events).results[0]?.message).toEqual(MESSAGE);
+    expect(undecodable.issues).toHaveLength(4);
+    expect(undecodable.issues[0]).toMatch(/raw bytes do not decode; its intent is unknown/);
+    expect(undecodable.events).toEqual([]);
+  });
+
+  it("another contract's configuration yields nothing", async () => {
+    const events = await client(fake).miscEvents(emitter, { transactionHash: first.hash });
+    expect(
+      partEventsFromIndexer(events, { network: NETWORK, contract: "ee".repeat(32) }).events,
+    ).toEqual([]);
   });
 });
 
@@ -223,16 +251,14 @@ describe("state source", () => {
     );
   });
 
-  it("builds a publication through the indexer source that equals one built from the chain directly", async () => {
-    const publication = encodePublication(patternMessage(300));
-    const built = await buildPublicationTransaction(
+  it("builds a package through the indexer source that applies like one built from the chain directly", async () => {
+    const built = await buildPackageTransaction(
       indexerStateSource(client(fake)),
-      emitterBinding(SECRET),
-      configFor(emitter),
-      publication,
+      configFor(),
+      requestFor(emitter, emitterBinding(SECRET), patternParts(2, 30)),
     );
     expect(built.block.hash).toBe(chain.parentBlockHash);
-    expect(built.expected.tails).toHaveLength(2);
+    expect(built.packages[0]?.parts).toHaveLength(2);
     const fork = chain.fork();
     const result = fork.apply(built.transaction.eraseProofs());
     expect(result.type).toBe("success");

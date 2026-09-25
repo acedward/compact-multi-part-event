@@ -1,11 +1,10 @@
 /**
- * Opt-in end-to-end run with real proofs from a local proof server (ported from the
- * soundness audit, B3 and the merge follow-up). Requires:
+ * Opt-in end-to-end run with real proofs from a local proof server. Requires:
  *   PROOF_SERVER_URL   e.g. http://<prefix>-proof-server:6300
  *   ZK_ARTIFACTS_DIR   directory with keys/ and zkir/ for emitPart (npm run compile:zk →
  *                      build/zk/emitter); its verifier key must equal the committed one
  * Optional: PROVE_LIMIT_AT=33,34 proves those part counts and reports whether the
- * default cost check accepts them (several minutes each).
+ * default cost check accepts them (the block fit; several minutes each).
  *
  * The local ledger applies the proven transactions with balancing and signatures
  * relaxed. It does not verify proofs (the published wasm build cannot), and this test
@@ -17,33 +16,31 @@ import { join } from "node:path";
 import * as ledger from "@midnightntwrk/ledger-v9";
 import { describe, expect, it } from "vitest";
 
-import { proofServerProver } from "../src/adapters/prover.js";
-import { zkConfigForContract } from "../src/adapters/zk-config.js";
-import { encodePublication } from "../src/codec/index.js";
+import { proofServerProver } from "../deploy-tools/prover.js";
+import { zkConfigForContract } from "../deploy-tools/zk-config.js";
 import {
-  statusFromLedgerResult,
-  verifyPublicationTransaction,
-} from "../src/codec/raw-transaction.js";
-import {
-  buildPublicationTransaction,
-  finalizePublication,
-  locatePublication,
+  buildPackageTransaction,
+  finalizeTransactionPackages,
+  locateRecord,
   type PublicationBalancer,
   type PublicationProver,
-  submitPublication,
-} from "../src/transaction/index.js";
+  splitPayload,
+  submitRecord,
+} from "../src/publisher/index.js";
+import { statusFromLedgerResult, verifyTransactionPackages } from "../src/reader/index.js";
 import { filled32, hashedBytes } from "./helpers/bytes.js";
-import { EMITTER_VERIFIER_KEY } from "./helpers/generated.js";
+import { EMITTER_VERIFIER_KEY, EXAMPLE_NAME } from "./helpers/generated.js";
 import {
-  assembleIntent,
   configFor,
   deployEmitter,
   emitterBinding,
-  emitterTrace,
+  guaranteedTranscript,
+  assembleIntent,
   LocalChain,
   NETWORK,
+  requestFor,
   starve,
-  transcriptsAt,
+  traceOf,
 } from "./helpers/ledger.js";
 
 const PROOF_SERVER_URL = process.env.PROOF_SERVER_URL ?? "";
@@ -56,10 +53,9 @@ const FOREIGN = filled32(0x92);
 type Proven = ledger.Transaction<ledger.SignatureEnabled, ledger.Proof, ledger.PreBinding>;
 
 /**
- * The repository's prover adapter over midnight-js 5.0.0-beta.7's HTTP proving provider:
- * at most PROOF_CONCURRENCY (default 4) requests in flight, bounded retries on
- * 408/429/connection resets, and the answer checked to be a proven ledger-v9
- * transaction of this process.
+ * deploy-tools' prover over midnight-js 5.0.0-beta.7's HTTP proving provider: at most
+ * PROOF_CONCURRENCY (default 4) requests in flight, bounded retries on 408/429/connection
+ * resets, and the answer checked to be a proven ledger-v9 transaction of this process.
  */
 const prover = (): PublicationProver =>
   proofServerProver({
@@ -83,7 +79,9 @@ const record = (tag: string, value: Record<string, unknown>): void => {
   );
 };
 
-describe.skipIf(!enabled)("real proofs through the composer, finalize and submit", () => {
+const target = (contract: string) => ({ contract, entryPoint: "emitPart", name: EXAMPLE_NAME });
+
+describe.skipIf(!enabled)("real proofs through the publisher, finalize and submit", () => {
   it("uses keys whose verifier key equals the committed one", () => {
     const generated = new Uint8Array(
       readFileSync(join(ZK_ARTIFACTS_DIR, "keys/emitPart.verifier")),
@@ -91,31 +89,24 @@ describe.skipIf(!enabled)("real proofs through the composer, finalize and submit
     expect(generated).toEqual(EMITTER_VERIFIER_KEY);
   });
 
-  it.each([
-    { parts: 1, length: 208 },
-    { parts: 2, length: 399 },
-    { parts: 3, length: 624 },
-    { parts: 8, length: 1647 },
-  ])(
-    "N=$parts: prove, bind, submit the saved bytes, apply, verify from raw bytes",
-    async ({ parts, length }) => {
+  it.each([{ parts: 1 }, { parts: 2 }, { parts: 4 }, { parts: 8 }])(
+    "k=$parts: prove, bind, submit the saved bytes, apply, verify from raw bytes",
+    async ({ parts }) => {
       const chain = new LocalChain();
       const emitter = await deployEmitter(chain, SECRET);
-      const message = hashedBytes(length, `real-${String(parts)}`);
-      const publication = encodePublication(message);
-      expect(publication.parts).toHaveLength(parts);
+      const payload = hashedBytes(parts * 256 - 7, `real-${String(parts)}`);
+      const split = splitPayload(payload);
+      expect(split).toHaveLength(parts);
 
       const buildStart = performance.now();
-      const built = await buildPublicationTransaction(
+      const built = await buildPackageTransaction(
         chain.source(),
-        emitterBinding(SECRET),
-        configFor(emitter),
-        publication,
+        configFor(),
+        requestFor(emitter, emitterBinding(SECRET), split),
       );
       const buildMs = performance.now() - buildStart;
-      const intentHashBefore = built.transaction.intents
-        ?.get(built.expected.segment)
-        ?.intentHash(built.expected.segment);
+      const segment = built.packages[0]?.segment ?? 0;
+      const intentHashBefore = built.transaction.intents?.get(segment)?.intentHash(segment);
 
       let proveMs = 0;
       const base = prover();
@@ -127,13 +118,13 @@ describe.skipIf(!enabled)("real proofs through the composer, finalize and submit
           return proven;
         },
       };
-      const saved = await finalizePublication({ prover: timed, balancer: binder }, built, {
+      const saved = await finalizeTransactionPackages({ prover: timed, balancer: binder }, built, {
         proofTimeoutMs: TIMEOUT,
       });
       expect(saved.transactionHash).toMatch(/^[0-9a-f]{64}$/);
 
       const submitted: ledger.FinalizedTransaction[] = [];
-      const id = await submitPublication(
+      const id = await submitRecord(
         {
           submitTx: (tx) => {
             submitted.push(tx);
@@ -148,30 +139,27 @@ describe.skipIf(!enabled)("real proofs through the composer, finalize and submit
       expect(Buffer.from(snapshot.serialize()).toString("hex")).toBe(saved.transactionHex);
 
       const params = chain.state.parameters;
-      const cost = snapshot.cost(params, true);
-      const normalized = params.normalizeFullness(cost);
+      const normalized = params.normalizeFullness(snapshot.cost(params, true));
       const fees = snapshot.fees(params);
       const result = chain.apply(snapshot);
       expect(result.type, String(result.error)).toBe("success");
       expect(result.events).toHaveLength(parts);
 
-      const report = verifyPublicationTransaction(Buffer.from(saved.transactionHex, "hex"), {
-        emitter,
-        entryPoint: "emitPart",
+      const verification = verifyTransactionPackages(Buffer.from(saved.transactionHex, "hex"), {
+        ...target(emitter),
         network: NETWORK,
         status: statusFromLedgerResult(result.type),
         transactionHash: saved.transactionHash ?? "",
       });
-      expect(report.issues).toEqual([]);
-      expect(report.accepted).toHaveLength(1);
-      expect(report.accepted[0]?.message).toEqual(message);
-      expect(locatePublication(snapshot, saved)).toEqual({ contains: true, merged: false });
+      expect(verification.issues).toEqual([]);
+      expect(verification.verified).toHaveLength(1);
+      expect(verification.verified[0]?.payload?.subarray(0, payload.byteLength)).toEqual(payload);
+      expect(locateRecord(snapshot, saved)).toEqual({ contains: true, merged: false });
 
       const provenBytes = saved.transactionHex.length / 2;
       const erasedBytes = snapshot.eraseProofs().serialize().byteLength;
       record("real-proof", {
         parts,
-        messageBytes: length,
         buildMs: Math.round(buildMs),
         proveMs: Math.round(proveMs),
         provenBoundBytes: provenBytes,
@@ -180,58 +168,48 @@ describe.skipIf(!enabled)("real proofs through the composer, finalize and submit
         normalizedBlockUsage: normalized.blockUsage,
         normalizedCompute: normalized.computeTime,
         fees,
-        intentHashStableAcrossProveAndBind: intentHashBefore === saved.intentHash,
+        intentHashStableAcrossProveAndBind: intentHashBefore === saved.packages[0]?.intentHash,
       });
     },
     TIMEOUT,
   );
 
   it(
-    "a proven, bound foreign failing fallible intent merged in: PARTIAL_SUCCESS, still accepted and located",
+    "a proven, bound foreign failing fallible intent merged in: PARTIAL_SUCCESS, still verified and located",
     async () => {
       const chain = new LocalChain();
       const emitter = await deployEmitter(chain, SECRET);
       const foreignEmitter = await deployEmitter(chain, FOREIGN);
-      const message = hashedBytes(624, "merge-victim");
-      let built = await buildPublicationTransaction(
+      const payload = hashedBytes(600, "merge-victim");
+      let built = await buildPackageTransaction(
         chain.source(),
-        emitterBinding(SECRET),
-        configFor(emitter),
-        encodePublication(message),
+        configFor(),
+        requestFor(emitter, emitterBinding(SECRET), splitPayload(payload)),
       );
-      while (built.expected.segment === 65535) {
-        built = await buildPublicationTransaction(
+      while (built.packages[0]?.segment === 65535) {
+        built = await buildPackageTransaction(
           chain.source(),
-          emitterBinding(SECRET),
-          configFor(emitter),
-          encodePublication(message),
+          configFor(),
+          requestFor(emitter, emitterBinding(SECRET), splitPayload(payload)),
         );
       }
-      const saved = await finalizePublication({ prover: prover(), balancer: binder }, built, {
-        proofTimeoutMs: TIMEOUT,
-      });
-
-      const foreign = await buildPublicationTransaction(
-        chain.source(),
-        emitterBinding(FOREIGN),
-        configFor(foreignEmitter),
-        encodePublication(hashedBytes(10, "foreign")),
+      const saved = await finalizeTransactionPackages(
+        { prover: prover(), balancer: binder },
+        built,
+        {
+          proofTimeoutMs: TIMEOUT,
+        },
       );
-      const [transcript] = transcriptsAt(foreign.transaction, foreign.expected.segment);
-      const [tail] = foreign.expected.tails;
-      if (transcript === undefined || tail === undefined) throw new Error("no foreign call");
-      const trace = await emitterTrace(
+      const trace = await traceOf(
         chain,
         foreignEmitter,
-        FOREIGN,
-        foreign.expected.requestId,
-        tail,
+        emitterBinding(FOREIGN),
+        splitPayload(hashedBytes(10, "foreign"))[0] as Uint8Array,
       );
       const attacker = assembleIntent(chain, foreignEmitter, 65535, [
-        { trace, fallible: starve(transcript) },
+        { trace, fallible: starve(guaranteedTranscript(chain, trace)) },
       ]);
       const attackerFinal = (await prover().proveTx(attacker, { timeout: TIMEOUT })).bind();
-
       const ours = ledger.Transaction.deserialize(
         "signature",
         "proof",
@@ -241,17 +219,16 @@ describe.skipIf(!enabled)("real proofs through the composer, finalize and submit
       const merged = ours.merge(attackerFinal);
       const result = chain.apply(merged);
       expect(result.type).toBe("partialSuccess");
-      const report = verifyPublicationTransaction(merged.serialize(), {
-        emitter,
-        entryPoint: "emitPart",
+      const verification = verifyTransactionPackages(merged.serialize(), {
+        ...target(emitter),
         network: NETWORK,
         status: statusFromLedgerResult(result.type),
         transactionHash: merged.transactionHash(),
       });
-      expect(report.issues).toEqual([]);
-      expect(report.accepted).toHaveLength(1);
-      expect(report.accepted[0]?.message).toEqual(message);
-      expect(locatePublication(merged, saved)).toEqual({ contains: true, merged: true });
+      expect(verification.issues).toEqual([]);
+      expect(verification.verified).toHaveLength(1);
+      expect(verification.verified[0]?.payload?.subarray(0, payload.byteLength)).toEqual(payload);
+      expect(locateRecord(merged, saved)).toEqual({ contains: true, merged: true });
       record("real-proof-merge", {
         result: result.type,
         events: result.events.length,
@@ -272,16 +249,15 @@ describe.skipIf(!enabled)("real proofs through the composer, finalize and submit
       for (const parts of limitAt) {
         const chain = new LocalChain();
         const emitter = await deployEmitter(chain, SECRET);
-        const message = hashedBytes(parts * 208, `limit-${String(parts)}`);
-        const built = await buildPublicationTransaction(
+        const payload = hashedBytes(parts * 256, `limit-${String(parts)}`);
+        const built = await buildPackageTransaction(
           chain.source(),
-          emitterBinding(SECRET),
-          configFor(emitter, { maxParts: parts }),
-          encodePublication(message, { maxMessageBytes: parts * 208, maxParts: parts }),
+          configFor({ maxParts: parts }),
+          requestFor(emitter, emitterBinding(SECRET), splitPayload(payload)),
         );
         let proven: Proven | undefined;
         const start = performance.now();
-        const outcome = await finalizePublication(
+        const outcome = await finalizeTransactionPackages(
           {
             prover: {
               proveTx: async (tx, config) => {
@@ -324,13 +300,12 @@ describe.skipIf(!enabled)("real proofs through the composer, finalize and submit
           );
           const result = chain.apply(snapshot);
           expect(result.type).toBe("success");
-          const report = verifyPublicationTransaction(snapshot, {
-            emitter,
-            entryPoint: "emitPart",
+          const verification = verifyTransactionPackages(snapshot, {
+            ...target(emitter),
             network: NETWORK,
             status: statusFromLedgerResult(result.type),
           });
-          expect(report.accepted[0]?.message).toEqual(message);
+          expect(verification.verified[0]?.payload).toEqual(payload);
         } else {
           expect(outcome.error).toMatch(/^after proving: /);
         }

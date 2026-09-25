@@ -1,6 +1,6 @@
 /**
  * A fake indexer (GraphQL v4 subset) and node RPC backed by the in-process ledger, for
- * adapter and CLI tests. It answers the queries `src/adapters/indexer.ts` sends, with
+ * indexer and CLI tests. It answers the queries `src/indexer/index.ts` sends, with
  * the same field shapes as indexer 4.x: hex without 0x, block timestamps in
  * milliseconds, typed Misc `name`/`payload` padded to 32/256 bytes, `raw` ledger event
  * bytes, and `raw` transaction bytes.
@@ -10,8 +10,11 @@ import type { AddressInfo } from "node:net";
 
 import type * as ledger from "@midnightntwrk/ledger-v9";
 
-import { decodeMiscValue, statusFromLedgerResult } from "../../src/codec/raw-transaction.js";
-import type { AnyTransaction } from "../../src/codec/raw-transaction.js";
+import {
+  type AnyTransaction,
+  decodeMiscValue,
+  statusFromLedgerResult,
+} from "../../src/reader/index.js";
 import { sha256, toHex } from "./bytes.js";
 import type { LocalChain } from "./ledger.js";
 

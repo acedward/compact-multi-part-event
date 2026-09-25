@@ -1,5 +1,5 @@
 /**
- * Prover adapter: retry classification, the concurrency limit, bounded retries on
+ * deploy-tools' prover client: retry classification, the concurrency limit, bounded retries on
  * 408/429/connection resets, refusal of anything but a proven ledger-v9 transaction of
  * this process, and the explicit wrong-assignment test: a provider with another seam
  * shape is rejected by the type checker and, if forced through a cast, fails at its
@@ -18,18 +18,24 @@ import {
   retryableProofError,
   type ProvingEndpoint,
   type RetryEvent,
-} from "../src/adapters/prover.js";
-import { encodePublication } from "../src/codec/index.js";
+} from "../deploy-tools/prover.js";
 import {
-  buildPublicationTransaction,
-  type BuiltPublication,
-  finalizePublication,
+  buildPackageTransaction,
+  type BuiltTransaction,
+  finalizeTransactionPackages,
+  PackageCheckError,
   type PublicationBalancer,
   type PublicationProver,
-  PublicationCheckError,
-} from "../src/transaction/index.js";
-import { filled32, patternMessage } from "./helpers/bytes.js";
-import { configFor, deployEmitter, emitterBinding, LocalChain, NETWORK } from "./helpers/ledger.js";
+} from "../src/publisher/index.js";
+import { filled32, patternParts } from "./helpers/bytes.js";
+import {
+  configFor,
+  deployEmitter,
+  emitterBinding,
+  LocalChain,
+  NETWORK,
+  requestFor,
+} from "./helpers/ledger.js";
 import { emitterInitialState } from "./helpers/generated.js";
 
 type Unbound = ledger.Transaction<ledger.SignatureEnabled, ledger.Proof, ledger.PreBinding>;
@@ -170,7 +176,7 @@ describe("answers", () => {
   });
 });
 
-describe("wrong direct assignment of a provider to the composer's seams", () => {
+describe("wrong direct assignment of a provider to the publisher's seams", () => {
   /** The shape of a version-tagged proof provider (midnight-js 5.0.0-beta.8 style). */
   interface TaggedProofProvider {
     proveTx(
@@ -198,17 +204,16 @@ describe("wrong direct assignment of a provider to the composer's seams", () => 
 
   describe("forced through a cast, it fails at its stage", () => {
     let chain: LocalChain;
-    let built: BuiltPublication;
+    let built: BuiltTransaction;
 
     beforeAll(async () => {
       chain = new LocalChain();
       const secret = filled32(0x21);
       const emitter = await deployEmitter(chain, secret);
-      built = await buildPublicationTransaction(
+      built = await buildPackageTransaction(
         chain.source(),
-        emitterBinding(secret),
-        configFor(emitter),
-        encodePublication(patternMessage(417)),
+        configFor(),
+        requestFor(emitter, emitterBinding(secret), patternParts(3, 2)),
       );
     });
 
@@ -233,12 +238,12 @@ describe("wrong direct assignment of a provider to the composer's seams", () => 
         proveTx: (tx: ledger.UnprovenTransaction) => tagged.proveTx({ version: "v9", tx }),
       } as unknown as PublicationProver;
       const error = await failure(() =>
-        finalizePublication({ prover: wronglyWired, balancer }, built, {
+        finalizeTransactionPackages({ prover: wronglyWired, balancer }, built, {
           proofTimeoutMs: 1000,
           requireProofs: false,
         }),
       );
-      expect(error).toBeInstanceOf(PublicationCheckError);
+      expect(error).toBeInstanceOf(PackageCheckError);
       expect(error.message).toMatch(/^after proving: the prover returned a version-tagged payload/);
       expect(balanced).toBe(0);
     });
@@ -248,7 +253,7 @@ describe("wrong direct assignment of a provider to the composer's seams", () => 
         proveTx: (tx: ledger.UnprovenTransaction) => Promise.resolve(tx.serialize()),
       } as unknown as PublicationProver;
       const error = await failure(() =>
-        finalizePublication(
+        finalizeTransactionPackages(
           { prover: bytesProver, balancer: { balanceTx: () => Promise.reject(new Error("x")) } },
           built,
           { proofTimeoutMs: 1000, requireProofs: false },
@@ -269,7 +274,7 @@ describe("wrong direct assignment of a provider to the composer's seams", () => 
           }),
       } as unknown as PublicationBalancer;
       const error = await failure(() =>
-        finalizePublication({ prover: identity, balancer: taggedBalancer }, built, {
+        finalizeTransactionPackages({ prover: identity, balancer: taggedBalancer }, built, {
           proofTimeoutMs: 1000,
           requireProofs: false,
         }),
