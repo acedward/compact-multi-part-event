@@ -27,7 +27,7 @@ export type IntentCheck = (tx: AnyTransaction, stage: string) => void;
 /** The public record of a finalized transaction (JSON-safe). */
 export interface FinalizedTransactionRecord {
   readonly network: string;
-  /** What the transaction does, e.g. `deploy`, `register3`. */
+  /** What the transaction does, e.g. `deploy emitter` or `pin`. */
   readonly purpose: string;
   readonly transactionHex: string;
   /** `null` only for unproven stand-ins in offline tests. */
