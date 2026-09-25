@@ -1,5 +1,5 @@
 /**
- * The publisher (FR-007): splitting, configuration and preflight (before any provider
+ * The publisher: splitting, configuration and preflight (before any provider
  * access), one pinned snapshot, circuit time in seconds, TTL, segment redraws, the
  * injected binding (including misbehaving bindings), every package-intent check (other
  * intents ignored, including same-contract ones), several packages per transaction

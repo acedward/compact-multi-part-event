@@ -3,7 +3,7 @@
 # `check.sh --fresh-clone` companion ${CMSE_DOCKER_PREFIX}-fresh, and show that none remain.
 # Resources are matched by the label they carry (cmse.prefix=<prefix>) or by their exact
 # names, never by a name prefix: resources of another prefix, even one that starts with
-# this one (cmse-p3-* for the default cmse), are never touched.
+# this one (cmse-live-* for the default cmse), are never touched.
 set -euo pipefail
 source "$(dirname "$0")/common.sh"
 

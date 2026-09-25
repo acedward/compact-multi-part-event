@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
-# Full secret-free check entry point (FR-018). Everything runs in Docker; no wallet,
-# mnemonic, network account or live transaction is used.
+# The one check entry point. Everything that builds or tests runs in Docker;
+# no wallet, mnemonic, network account or live transaction is used.
 #
 #   scripts/check.sh                 check this working tree
 #   scripts/check.sh --fresh-clone   clone the committed HEAD into a clean temporary
@@ -8,11 +8,14 @@
 #                                    (empty package cache: every dependency is installed
 #                                    from the lockfile)
 #
-# Steps, in the pinned Node image: `npm ci` from the committed package-lock.json, one
-# copy of each pinned ledger/runtime package, compile, key regeneration against the
-# committed hashes, format, lint, typecheck, build, tests, external consumer; then the label check
-# over the working tree and the full Git history. Docker resources are named
-# ${CMSE_DOCKER_PREFIX}-* (default cmse); remove them with scripts/docker/teardown.sh.
+# In the pinned Node image (scripts/check-in-container.sh): `npm ci` from the committed
+# package-lock.json, one copy of each pinned ledger/runtime package, compile, key
+# regeneration against the committed hashes (with each circuit's k and rows), format,
+# type-aware lint, typecheck, build, tests, and the separate-project build of the
+# notice-board example. Then, on the host's Git data, the repository check: the label
+# policy over the working tree and the full history, and the repository layout.
+# Docker resources are named ${CMSE_DOCKER_PREFIX}-* (default cmse); remove them with
+# scripts/docker/teardown.sh.
 set -euo pipefail
 source "$(dirname "$0")/docker/common.sh"
 
@@ -38,6 +41,6 @@ started="$(date +%s)"
 echo "== public parameters"
 "${CMSE_REPO_DIR}/scripts/docker/fetch-zk-params.sh"
 CMSE_ZK_PARAMS=1 "${CMSE_REPO_DIR}/scripts/docker/run.sh" check scripts/check-in-container.sh
-echo "== labels (working tree and full history)"
-"${CMSE_REPO_DIR}/scripts/check-labels.sh" --history
+echo "== repository (labels over the working tree and the full history; layout)"
+"${CMSE_REPO_DIR}/scripts/check-repo.sh" --history
 echo "all checks passed in $(($(date +%s) - started)) s"

@@ -1,5 +1,5 @@
 /**
- * The reader (FR-005) on synthetic events: exact-name filter, grouping per (network,
+ * The reader on synthetic events: exact-name filter, grouping per (network,
  * contract, N, transaction, segment), order by position never by delivery order,
  * redelivery and identity conflicts, merged payloads, width restoration, other names
  * and contracts untouched, bounds, and output independent of input order.

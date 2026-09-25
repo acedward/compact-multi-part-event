@@ -3,7 +3,7 @@
  * symlink, outside every Git working tree), bound to one wallet's public identity and
  * network, written atomically, never overwriting a file that is not a cache of this
  * wallet, and never quoting file contents in an error. Restoring the snapshots into a
- * live wallet needs a network (P3); here the snapshots are opaque strings.
+ * live wallet needs a network; here the snapshots are opaque strings.
  */
 import {
   chmodSync,

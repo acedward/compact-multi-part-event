@@ -1,9 +1,10 @@
 name: check
 
-# The same secret-free sequence as `scripts/check.sh`, in Docker: `npm ci` from the
-# committed package-lock.json, single-copy pins, compile, key regeneration against the
-# committed hashes, vectors, lint, types, build, tests, entry points, external consumer
-# and the label policy over the full history.
+# `scripts/check.sh` on every push to main and every pull request: in Docker, `npm ci`
+# from the committed package-lock.json, single-copy pins, compile, key regeneration
+# against the committed hashes, format, lint, types, build, tests and the
+# separate-project build; then the repository check (labels over the full history, the
+# repository layout).
 # No wallet, network account or live transaction is used.
 
 on:
