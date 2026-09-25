@@ -1,6 +1,0 @@
-2026-09-23T14:34:55.298Z wallet cache restoring the state saved at 2026-09-23T14:26:36.232Z (read only; not saved)
-2026-09-23T14:35:10.365Z wallet synced in 15004 ms: shielded 42989/42989, unshielded 17249/17249, dust 43037/43037 (applied/highest index)
-2026-09-23T14:35:11.496Z built release for request fcde97e961102a0617cdf6d4628d58d425326b6ff634585e130c9a2509da071b, segment 16257, block 588880
-2026-09-23T14:35:13.351Z finalized 9236 bytes; record written
-2026-09-23T14:35:31.477Z submitted 00ab36dce085ce50652dea8eb2dab3302f094167509dcaf934091195e472dfa402
-2026-09-23T14:35:32.002Z included dbc5dfffccc6c44e0e577c6cf8fa05743a8e774698d096d8a1eff44e7eb81557 at block 588884, status SUCCESS; registry still holds the request: false

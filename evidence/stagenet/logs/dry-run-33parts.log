@@ -1,8 +1,0 @@
-2026-09-23T14:19:30.807Z opening wallet     (syncing with https://indexer.stagenet.shielded.tools/api/v4/graphql)
-2026-09-23T14:19:30.850Z wallet cache       restoring the state saved at 2026-09-23T14:18:28.029Z
-2026-09-23T14:19:30.893Z wallet sync        waiting until the shielded, unshielded and DUST wallets have applied everything the indexer reports (a first sync downloads every ledger event and can take long; timeout 120 min, progress every 30 s)
-2026-09-23T14:19:45.903Z wallet synced      in 15 s: shielded 42989/42989, unshielded 17249/17249, dust 43029/43029 (applied/highest index)
-2026-09-23T14:19:45.908Z wallet cache       saved (shielded 42989/42989, unshielded 17249/17249, dust 43029/43029 (applied/highest index))
-2026-09-23T14:19:46.963Z built              33 parts, request 058a5ed66301fd5df72615a6791352fb19e0f770daf25d3487b7055504cdb486, segment 11768, block 588728
-2026-09-23T14:22:38.229Z finalized          197995 bytes; block usage 0.1979 of a block
-exit 0 2026-09-23T14:22:39Z

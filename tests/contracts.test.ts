@@ -1,26 +1,27 @@
 /**
- * Compiled Compact behaviour in the runtime 0.19.0 simulator: circuit surface and
- * purity, the exact emitted event, and both example access controls.
+ * Compiled Compact examples in the runtime 0.19.0 simulator: circuit surfaces and
+ * purity, the exact emitted event of each adopter, the whitelist, and the test-only
+ * open emitter.
  */
-import type { ChargedState, ContractState } from "@midnight-ntwrk/compact-runtime";
+import { createConstructorContext } from "@midnight-ntwrk/compact-runtime";
 import { describe, expect, it } from "vitest";
 
+import { emitterAuthorityOf } from "../contract-examples/whitelist/whitelist.js";
+import { eventName } from "../src/reader/index.js";
+import { ascii, filled32, patternParts, sha256 } from "./helpers/bytes.js";
 import {
-  emitterAuthorityOf,
-  type MessageOwnerPrivateState,
-  messageOwnerOf,
-} from "../src/contract/index.js";
-import { ascii, filled32, patternMessage, sha256, specName, specTails } from "./helpers/bytes.js";
-import {
+  COIN_PUBLIC_KEY,
   context,
   contractInfo,
-  emitterBinding,
   emitterContract,
   emitterInitialState,
+  emitterModule,
+  EXAMPLE_NAME,
   miscBytes,
-  registryBinding,
-  registryContract,
-  registryInitialState,
+  NOTICE_NAME,
+  noticeBoardModule,
+  openEmitterContract,
+  openEmitterInitialState,
   sampleAddress,
 } from "./helpers/generated.js";
 
@@ -30,48 +31,70 @@ const OTHER_SECRET = filled32(0x22);
 const opNames = (program: readonly unknown[]): string[] =>
   program.map((op) => (typeof op === "string" ? op : (Object.keys(op as object)[0] ?? "?")));
 
-describe("compiled surface", () => {
-  it("reference emitter: emitPart is impure and provable; emitterAuthorityOf is pure; nothing else", () => {
-    const info = contractInfo("contracts/managed/emitter");
-    expect(info["compiler-version"]).toBe("0.34.0");
-    expect(info["runtime-version"]).toBe("0.19.0");
-    expect(info.circuits.map(({ name, pure, proof }) => ({ name, pure, proof }))).toEqual([
-      { name: "emitterAuthorityOf", pure: true, proof: false },
-      { name: "emitPart", pure: false, proof: true },
-    ]);
-    expect(info.witnesses.map(({ name }) => name)).toEqual(["emitterSecret"]);
-    expect(info.ledger.map(({ name, storage, exported }) => ({ name, storage, exported }))).toEqual(
-      [{ name: "emitterAuthority", storage: "Cell", exported: true }],
-    );
-    const contract = emitterContract();
-    expect(Object.keys(contract.impureCircuits)).toEqual(["emitPart"]);
-    expect(Object.keys(contract.provableCircuits)).toEqual(["emitPart"]);
-    expect(Object.keys(emitterBinding.pureCircuits)).toEqual(["emitterAuthorityOf"]);
+const surface = (managed: string) => {
+  const info = contractInfo(managed);
+  return {
+    compiler: info["compiler-version"],
+    runtime: info["runtime-version"],
+    circuits: info.circuits.map(({ name, pure, proof }) => ({ name, pure, proof })),
+    witnesses: info.witnesses.map(({ name }) => name),
+    ledger: info.ledger.map(({ name, storage }) => ({ name, storage })),
+  };
+};
+
+describe("compiled surfaces", () => {
+  it("reference emitter: emitPart impure and provable, emitterAuthorityOf pure, one sealed cell", () => {
+    expect(surface("contract-examples/emitter/managed")).toEqual({
+      compiler: "0.34.0",
+      runtime: "0.19.0",
+      circuits: [
+        { name: "emitterAuthorityOf", pure: true, proof: false },
+        { name: "emitPart", pure: false, proof: true },
+      ],
+      witnesses: ["emitterSecret"],
+      ledger: [{ name: "emitterAuthority", storage: "Cell" }],
+    });
+    expect(Object.keys(emitterContract().impureCircuits)).toEqual(["emitPart"]);
+    expect(Object.keys(emitterModule.pureCircuits)).toEqual(["emitterAuthorityOf"]);
   });
 
-  it("registry test contract: registration, emission and release are impure and provable", () => {
-    const info = contractInfo("tests/contracts/managed/registry-emitter");
-    expect(info.circuits.map(({ name, pure, proof }) => ({ name, pure, proof }))).toEqual([
-      { name: "messageOwnerOf", pure: true, proof: false },
-      { name: "register1", pure: false, proof: true },
-      { name: "register2", pure: false, proof: true },
-      { name: "register3", pure: false, proof: true },
-      { name: "emitPart", pure: false, proof: true },
-      { name: "release", pure: false, proof: true },
-    ]);
-    expect(info.witnesses.map(({ name }) => name)).toEqual(["messageOwnerSecret"]);
-    expect(info.ledger.map(({ name, storage }) => ({ name, storage }))).toEqual([
-      { name: "messageOwner", storage: "Map" },
-    ]);
-    expect(Object.keys(registryBinding.pureCircuits)).toEqual(["messageOwnerOf"]);
+  it("notice board: its own state, emitPart and pin impure and provable", () => {
+    expect(surface("contract-examples/notice-board/managed")).toEqual({
+      compiler: "0.34.0",
+      runtime: "0.19.0",
+      circuits: [
+        { name: "emitterAuthorityOf", pure: true, proof: false },
+        { name: "emitPart", pure: false, proof: true },
+        { name: "pin", pure: false, proof: true },
+      ],
+      witnesses: ["emitterSecret"],
+      ledger: [
+        { name: "emitterAuthority", storage: "Cell" },
+        { name: "pinnedCount", storage: "Counter" },
+        { name: "pinnedDigest", storage: "Cell" },
+      ],
+    });
+  });
+
+  it("open emitter (test only): emitPart without witnesses or state", () => {
+    expect(surface("tests/contracts/managed/open-emitter")).toEqual({
+      compiler: "0.34.0",
+      runtime: "0.19.0",
+      circuits: [{ name: "emitPart", pure: false, proof: true }],
+      witnesses: [],
+      ledger: [],
+    });
   });
 });
 
-describe("EmitterWhitelist on the reference emitter", () => {
-  it("the off-chain commitment equals the contract's pure emitterAuthorityOf", () => {
+describe("EmitterWhitelist", () => {
+  it("the off-chain commitment equals both contracts' pure emitterAuthorityOf", () => {
     for (const secret of [EMITTER_SECRET, OTHER_SECRET, new Uint8Array(32), sha256(ascii("x"))]) {
       expect(emitterAuthorityOf(secret)).toEqual(
-        emitterBinding.pureCircuits.emitterAuthorityOf(secret),
+        emitterModule.pureCircuits.emitterAuthorityOf(secret),
+      );
+      expect(emitterAuthorityOf(secret)).toEqual(
+        noticeBoardModule.pureCircuits.emitterAuthorityOf(secret),
       );
     }
     expect(() => emitterAuthorityOf(new Uint8Array(31))).toThrow(/32 bytes/);
@@ -83,42 +106,56 @@ describe("EmitterWhitelist on the reference emitter", () => {
     );
     const authority = emitterAuthorityOf(EMITTER_SECRET);
     const state = await emitterInitialState(authority);
-    expect(emitterBinding.ledger(state.data).emitterAuthority).toEqual(authority);
+    expect(emitterModule.ledger(state.data).emitterAuthority).toEqual(authority);
   });
 
-  it("an authorized part emits exactly the specified Misc event and changes no state", async () => {
+  it("a caller with the wrong or a missing secret fails during execution: no event, no proof input", async () => {
     const state = await emitterInitialState(emitterAuthorityOf(EMITTER_SECRET));
     const address = sampleAddress();
-    const message = patternMessage(300);
-    const tails = specTails(message);
-    const requestId = sha256(...tails);
-    expect(tails).toHaveLength(2);
-
+    const [part] = patternParts(1);
+    if (part === undefined) throw new Error("no part");
     const contract = emitterContract();
-    // Both parts run from the same pre-state, as the batch composer does.
+    await expect(
+      contract.circuits.emitPart(
+        context("emitPart", address, state, { emitterSecret: OTHER_SECRET }),
+        part,
+      ),
+    ).rejects.toThrow(/EmitterWhitelist: caller is not the emitter authority/);
+    await expect(
+      contract.circuits.emitPart(
+        context("emitPart", address, state, { emitterSecret: new Uint8Array(0) }),
+        part,
+      ),
+    ).rejects.toThrow(/secret must be 32 bytes/);
+  });
+});
+
+describe("emitted events", () => {
+  it("reference emitter: each part emits exactly one Misc event, name example:message[v1], the payload unchanged; no state change", async () => {
+    const state = await emitterInitialState(emitterAuthorityOf(EMITTER_SECRET));
+    const address = sampleAddress();
+    const parts = patternParts(3, 1);
+    const contract = emitterContract();
+    // Every part runs from the same pre-state, as the publisher does.
     const results = await Promise.all(
-      tails.map((tail) =>
+      parts.map((part) =>
         contract.circuits.emitPart(
           context("emitPart", address, state, { emitterSecret: EMITTER_SECRET }),
-          requestId,
-          tail,
+          part,
         ),
       ),
     );
     results.forEach((result, index) => {
-      const events = result.context.events;
-      expect(events).toHaveLength(1);
-      const [event] = events;
+      expect(result.context.events).toHaveLength(1);
+      const [event] = result.context.events;
       if (event === undefined) throw new Error("no event");
       expect(event.address).toBe(address);
       expect(event.version).toBe(1);
       const bytes = miscBytes(event);
-      expect(bytes.subarray(0, 32)).toEqual(specName(index + 1, 2));
-      expect(bytes.subarray(0, 13)).toEqual(ascii("mip-xxxx[v1]:"));
-      expect(bytes.subarray(21, 32)).toEqual(new Uint8Array(11));
-      expect(bytes.subarray(32, 64)).toEqual(requestId);
-      expect(bytes.subarray(64)).toEqual(tails[index]);
-
+      expect(bytes.subarray(0, 32)).toEqual(eventName(EXAMPLE_NAME));
+      expect(bytes.subarray(0, 19)).toEqual(ascii("example:message[v1]"));
+      expect(bytes.subarray(19, 32)).toEqual(new Uint8Array(13));
+      expect(bytes.subarray(32)).toEqual(parts[index]);
       const traces = result.context.callProofDataTrace;
       expect(traces).toHaveLength(1);
       // One read of the sealed authority cell, then the event.
@@ -129,184 +166,71 @@ describe("EmitterWhitelist on the reference emitter", () => {
         "push",
         "log",
       ]);
-      const after = result.context.callContext.currentQueryContext.state;
-      expect(after.state.encode()).toEqual(state.data.state.encode());
+      expect(result.context.callContext.currentQueryContext.state.state.encode()).toEqual(
+        state.data.state.encode(),
+      );
     });
   });
 
-  it("copies tail bytes 0..7 into the name without validating them (the reader validates)", async () => {
-    const state = await emitterInitialState(emitterAuthorityOf(EMITTER_SECRET));
+  it("notice board: emitPart emits notice-board:notice[v1] and leaves the board's state unchanged; pin changes it", async () => {
+    type Board = { emitterSecret: Uint8Array };
+    const contract = new noticeBoardModule.Contract<Board>({
+      emitterSecret: ({ privateState }) => [privateState, privateState.emitterSecret],
+    });
+    const initial = await contract.initialState(
+      createConstructorContext<Board>({ emitterSecret: EMITTER_SECRET }, COIN_PUBLIC_KEY),
+      emitterAuthorityOf(EMITTER_SECRET),
+    );
+    const state = initial.currentContractState;
     const address = sampleAddress();
-    const tail = new Uint8Array(224);
-    tail.set(ascii("junk!!!!"), 0);
-    const result = await emitterContract().circuits.emitPart(
+    const [part] = patternParts(1, 4);
+    if (part === undefined) throw new Error("no part");
+    const emitted = await contract.circuits.emitPart(
       context("emitPart", address, state, { emitterSecret: EMITTER_SECRET }),
-      new Uint8Array(32),
-      tail,
+      part,
+    );
+    const [event] = emitted.context.events;
+    if (event === undefined) throw new Error("no event");
+    expect(miscBytes(event).subarray(0, 32)).toEqual(eventName(NOTICE_NAME));
+    expect(miscBytes(event).subarray(32)).toEqual(part);
+    expect(emitted.context.callContext.currentQueryContext.state.state.encode()).toEqual(
+      state.data.state.encode(),
+    );
+    const digest = sha256(part);
+    const pinned = await contract.circuits.pin(
+      context("pin", address, state, { emitterSecret: EMITTER_SECRET }),
+      digest,
+    );
+    expect(pinned.context.events).toHaveLength(0);
+    const after = noticeBoardModule.ledger(pinned.context.callContext.currentQueryContext.state);
+    expect(after.pinnedCount).toBe(1n);
+    expect(after.pinnedDigest).toEqual(digest);
+    await expect(
+      contract.circuits.pin(
+        context("pin", address, state, { emitterSecret: OTHER_SECRET }),
+        digest,
+      ),
+    ).rejects.toThrow(/caller is not the emitter authority/);
+  });
+
+  it("open emitter: anyone emits example:message[v1] with the payload unchanged", async () => {
+    const state = await openEmitterInitialState();
+    const address = sampleAddress();
+    const [part] = patternParts(1, 9);
+    if (part === undefined) throw new Error("no part");
+    const result = await openEmitterContract().circuits.emitPart(
+      context("emitPart", address, state, undefined),
+      part,
     );
     const [event] = result.context.events;
     if (event === undefined) throw new Error("no event");
-    expect(miscBytes(event).subarray(13, 21)).toEqual(ascii("junk!!!!"));
-  });
-
-  it("a caller with the wrong or a missing secret fails during execution: no event, no proof input", async () => {
-    const state = await emitterInitialState(emitterAuthorityOf(EMITTER_SECRET));
-    const address = sampleAddress();
-    const [tail] = specTails(patternMessage(10));
-    if (tail === undefined) throw new Error("no tail");
-    const contract = emitterContract();
-    await expect(
-      contract.circuits.emitPart(
-        context("emitPart", address, state, { emitterSecret: OTHER_SECRET }),
-        new Uint8Array(32),
-        tail,
-      ),
-    ).rejects.toThrow(/EmitterWhitelist: caller is not the emitter authority/);
-    await expect(
-      contract.circuits.emitPart(
-        context("emitPart", address, state, { emitterSecret: new Uint8Array(0) }),
-        new Uint8Array(32),
-        tail,
-      ),
-    ).rejects.toThrow(/secret must be 32 bytes/);
-  });
-});
-
-describe("MessageRegistry on the registry test contract", () => {
-  const owner: MessageOwnerPrivateState = { messageOwnerSecret: filled32(0x33) };
-  const stranger: MessageOwnerPrivateState = { messageOwnerSecret: filled32(0x44) };
-  const message = patternMessage(500, 7);
-  const tails = specTails(message);
-  const requestId = sha256(...tails);
-
-  const registered = async (): Promise<{ address: string; state: ChargedState }> => {
-    const initial: ContractState = await registryInitialState();
-    const address = sampleAddress();
-    const result = await registryContract().circuits.register3(
-      context("register3", address, initial, owner),
-      requestId,
-      tails,
-    );
-    return { address, state: result.context.callContext.currentQueryContext.state };
-  };
-
-  it("the off-chain owner commitment equals the contract's pure messageOwnerOf", () => {
-    expect(messageOwnerOf(owner.messageOwnerSecret)).toEqual(
-      registryBinding.pureCircuits.messageOwnerOf(owner.messageOwnerSecret),
-    );
-  });
-
-  it("registration accepts only tails whose SHA-256 is the request id (N = 1, 2, 3)", async () => {
-    expect(tails).toHaveLength(3);
-    const { state } = await registered();
-    const ledgerState = registryBinding.ledger(state);
-    expect(ledgerState.messageOwner.member(requestId)).toBe(true);
-    expect(ledgerState.messageOwner.lookup(requestId)).toEqual(
-      messageOwnerOf(owner.messageOwnerSecret),
-    );
-
-    const contract = registryContract();
-    const initial = await registryInitialState();
-    const one = specTails(patternMessage(100));
-    const two = specTails(patternMessage(300));
-    await expect(
-      contract.circuits.register1(
-        context("register1", sampleAddress(), initial, owner),
-        sha256(...one),
-        one,
-      ),
-    ).resolves.toBeDefined();
-    await expect(
-      contract.circuits.register2(
-        context("register2", sampleAddress(), initial, owner),
-        sha256(...two),
-        two,
-      ),
-    ).resolves.toBeDefined();
-    const wrong = sha256(...tails).map((byte, index) => (index === 0 ? byte ^ 1 : byte));
-    await expect(
-      contract.circuits.register3(
-        context("register3", sampleAddress(), initial, owner),
-        wrong,
-        tails,
-      ),
-    ).rejects.toThrow(/request id does not match the tails/);
-  });
-
-  it("a request id can be registered only once, even by someone else", async () => {
-    const { address, state } = await registered();
-    for (const who of [owner, stranger]) {
-      await expect(
-        registryContract().circuits.register3(
-          context("register3", address, state, who),
-          requestId,
-          tails,
-        ),
-      ).rejects.toThrow(/request id already registered/);
-    }
-  });
-
-  it("parts need a registration and the owner's secret; they only read the registry", async () => {
-    const contract = registryContract();
-    const initial = await registryInitialState();
-    await expect(
-      contract.circuits.emitPart(
-        context("emitPart", sampleAddress(), initial, owner),
-        requestId,
-        tails[0] ?? new Uint8Array(224),
-      ),
-    ).rejects.toThrow(/request id not registered/);
-
-    const { address, state } = await registered();
-    await expect(
-      contract.circuits.emitPart(
-        context("emitPart", address, state, stranger),
-        requestId,
-        tails[0] ?? new Uint8Array(224),
-      ),
-    ).rejects.toThrow(/caller does not own this request id/);
-
-    const results = await Promise.all(
-      tails.map((tail) =>
-        contract.circuits.emitPart(context("emitPart", address, state, owner), requestId, tail),
-      ),
-    );
-    results.forEach((result, index) => {
-      const [event] = result.context.events;
-      if (event === undefined) throw new Error("no event");
-      expect(miscBytes(event)).toEqual(
-        Uint8Array.from([...specName(index + 1, 3), ...requestId, ...(tails[index] ?? [])]),
-      );
-      const after = result.context.callContext.currentQueryContext.state;
-      expect(after.state.encode()).toEqual(state.state.encode());
-    });
-  });
-
-  it("only the owner can release; afterwards parts fail and the id can be registered again", async () => {
-    const contract = registryContract();
-    const { address, state } = await registered();
-    await expect(
-      contract.circuits.release(context("release", address, state, stranger), requestId),
-    ).rejects.toThrow(/caller does not own this request id/);
-    const released = await contract.circuits.release(
-      context("release", address, state, owner),
-      requestId,
-    );
-    const afterRelease = released.context.callContext.currentQueryContext.state;
-    expect(registryBinding.ledger(afterRelease).messageOwner.member(requestId)).toBe(false);
-    await expect(
-      contract.circuits.emitPart(
-        context("emitPart", address, afterRelease, owner),
-        requestId,
-        tails[0] ?? new Uint8Array(224),
-      ),
-    ).rejects.toThrow(/request id not registered/);
-    await expect(
-      contract.circuits.register3(
-        context("register3", address, afterRelease, stranger),
-        requestId,
-        tails,
-      ),
-    ).resolves.toBeDefined();
+    const bytes = miscBytes(event);
+    expect(bytes.subarray(0, 32)).toEqual(eventName(EXAMPLE_NAME));
+    expect(bytes.subarray(32)).toEqual(part);
+    expect(opNames(result.context.callProofDataTrace[0]?.publicTranscript ?? [])).toEqual([
+      "push",
+      "log",
+    ]);
+    expect(eventName(NOTICE_NAME)).not.toEqual(eventName(EXAMPLE_NAME));
   });
 });

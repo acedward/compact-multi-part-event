@@ -8,10 +8,11 @@ build/
 coverage/
 
 # Compiler output. Regenerate with `npm run compile` (skip-zk) or `npm run compile:zk`.
-# Verifier keys and their hashes are committed separately under contracts/keys/.
-contracts/managed/
+# Verifier keys and their hashes are committed separately under contract-examples/*/keys/.
+contract-examples/*/managed/
+contract-examples/*/dist/
+contract-examples/*/node_modules/
 tests/contracts/managed/
-examples/consumer/managed/
 
 # Downloaded toolchains and caches
 .cache/
@@ -19,7 +20,6 @@ examples/consumer/managed/
 # Runtime secrets and local configuration: never commit
 .env
 .env.*
-!.env.example
 *.secret
 *.mnemonic
 

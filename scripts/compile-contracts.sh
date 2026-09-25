@@ -3,8 +3,11 @@
 #
 # Usage: scripts/compile-contracts.sh               # skip-zk build (default checks)
 #        scripts/compile-contracts.sh --zk [name]   # additionally generate keys into
-#                                                   # build/zk/<name> for emitter, consumer
-#                                                   # or all (default all)
+#                                                   # build/zk/<name> for emitter,
+#                                                   # notice-board or all (default all)
+#
+# Output: contract-examples/<example>/managed/ and tests/contracts/managed/<name>/
+# (generated, never committed).
 #
 # Needs the release's `compactc` wrapper (or COMPACTC) and `zkir-v3` on PATH;
 # scripts/docker/run.sh provides both from the verified release archive.
@@ -29,22 +32,21 @@ compile() {
   "${COMPACTC}" --feature-zkir-v3 "$@" "${source}" "${target}"
 }
 
-# Deployable contracts: name -> source (no associative arrays: macOS ships bash 3.2).
+# Deployable examples: name -> source (no associative arrays: macOS ships bash 3.2).
 source_of() {
   case "$1" in
-    emitter) echo contracts/emitter.compact ;;
-    consumer) echo examples/consumer/contracts/consumer.compact ;;
+    emitter) echo contract-examples/emitter/emitter.compact ;;
+    notice-board) echo contract-examples/notice-board/notice-board.compact ;;
   esac
 }
 
-compile contracts/emitter.compact contracts/managed/emitter --skip-zk
-compile examples/consumer/contracts/consumer.compact examples/consumer/managed/consumer --skip-zk
-compile tests/contracts/registry-emitter.compact tests/contracts/managed/registry-emitter --skip-zk
-compile tests/contracts/registry-sizes.compact tests/contracts/managed/registry-sizes --skip-zk
+compile contract-examples/emitter/emitter.compact contract-examples/emitter/managed --skip-zk
+compile contract-examples/notice-board/notice-board.compact contract-examples/notice-board/managed --skip-zk
+compile tests/contracts/open-emitter.compact tests/contracts/managed/open-emitter --skip-zk
 
 if [[ "${1:-}" == "--zk" ]]; then
   which="${2:-all}"
-  for name in emitter consumer; do
+  for name in emitter notice-board; do
     if [[ "${which}" == "all" || "${which}" == "${name}" ]]; then
       compile "$(source_of "${name}")" "build/zk/${name}"
     fi

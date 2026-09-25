@@ -13,25 +13,38 @@ import {
   sampleContractAddress,
 } from "@midnight-ntwrk/compact-runtime";
 
-import * as emitterBinding from "../../contracts/managed/emitter/contract/index.js";
-import * as registryBinding from "../contracts/managed/registry-emitter/contract/index.js";
+import * as emitterModule from "../../contract-examples/emitter/managed/contract/index.js";
+import * as noticeBoardModule from "../../contract-examples/notice-board/managed/contract/index.js";
 import {
   type EmitterPrivateState,
   emitterWitnesses,
-  type MessageOwnerPrivateState,
-  messageOwnerWitnesses,
-} from "../../src/contract/index.js";
+} from "../../contract-examples/whitelist/whitelist.js";
+import * as openEmitterModule from "../contracts/managed/open-emitter/contract/index.js";
 
-export { emitterBinding, registryBinding };
+export { emitterModule, noticeBoardModule, openEmitterModule };
+
+/** The reference emitter's event name. */
+export const EXAMPLE_NAME = "example:message[v1]";
+
+/** The notice board's event name. */
+export const NOTICE_NAME = "notice-board:notice[v1]";
 
 export const COIN_PUBLIC_KEY = "0".repeat(64);
 
 export const repoFile = (path: string): URL => new URL(`../../${path}`, import.meta.url);
 
-/** Committed reference-emitter verifier key (contracts/keys/emitter). */
-export const EMITTER_VERIFIER_KEY = new Uint8Array(
-  readFileSync(repoFile("contracts/keys/emitter/emitPart.verifier")),
+const committedKey = (path: string): Uint8Array => new Uint8Array(readFileSync(repoFile(path)));
+
+/** Committed reference-emitter verifier key. */
+export const EMITTER_VERIFIER_KEY = committedKey(
+  "contract-examples/emitter/keys/emitPart.verifier",
 );
+
+/** Committed notice-board verifier keys. */
+export const BOARD_VERIFIER_KEYS: Readonly<Record<string, Uint8Array>> = {
+  emitPart: committedKey("contract-examples/notice-board/keys/emitPart.verifier"),
+  pin: committedKey("contract-examples/notice-board/keys/pin.verifier"),
+};
 
 export const contractInfo = (managedDir: string): ContractInfo =>
   JSON.parse(
@@ -54,11 +67,11 @@ export interface ContractInfo {
   }[];
 }
 
-export const emitterContract = (): emitterBinding.Contract<EmitterPrivateState> =>
-  new emitterBinding.Contract<EmitterPrivateState>(emitterWitnesses);
+export const emitterContract = (): emitterModule.Contract<EmitterPrivateState> =>
+  new emitterModule.Contract<EmitterPrivateState>(emitterWitnesses);
 
-export const registryContract = (): registryBinding.Contract<MessageOwnerPrivateState> =>
-  new registryBinding.Contract<MessageOwnerPrivateState>(messageOwnerWitnesses);
+export const openEmitterContract = (): openEmitterModule.Contract<undefined> =>
+  new openEmitterModule.Contract<undefined>({});
 
 /** Initial reference-emitter state for an authority commitment. */
 export const emitterInitialState = async (authority: Uint8Array): Promise<ContractState> => {
@@ -72,12 +85,10 @@ export const emitterInitialState = async (authority: Uint8Array): Promise<Contra
   return initial.currentContractState;
 };
 
-export const registryInitialState = async (): Promise<ContractState> => {
-  const initial = await registryContract().initialState(
-    createConstructorContext<MessageOwnerPrivateState>(
-      { messageOwnerSecret: new Uint8Array(32) },
-      COIN_PUBLIC_KEY,
-    ),
+/** Initial open-emitter state (it has no state and no constructor argument). */
+export const openEmitterInitialState = async (): Promise<ContractState> => {
+  const initial = await openEmitterContract().initialState(
+    createConstructorContext<undefined>(undefined, COIN_PUBLIC_KEY),
   );
   return initial.currentContractState;
 };

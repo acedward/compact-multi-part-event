@@ -1,36 +1,40 @@
 /**
- * Where a bad publication dies (ported from the soundness audit, B4 proof-free half).
- * Calls are re-assembled from real compiled-circuit traces and the composer's own
- * partitioned transcripts, so only the property under test differs from a genuine
- * publication. Each case reports the real stage: publisher check (before any proof),
- * `wellFormed`, `apply`, or the wallet-free verifier.
+ * Where a bad package dies. Calls are re-assembled from real compiled-circuit traces
+ * and the publisher's own partitioned transcripts, so only the property under test
+ * differs from a genuine package. Each case reports the real stage: the publisher's
+ * intent check (before any proof), `wellFormed`, `apply`, the reader over the applied
+ * events, or the placement check over the raw transaction.
  */
 import type { CallProofData } from "@midnight-ntwrk/compact-runtime";
 import * as ledger from "@midnightntwrk/ledger-v9";
 import { beforeAll, describe, expect, it } from "vitest";
 
-import { encodePublication, type EncodedPublication, ReadStatus } from "../src/codec/index.js";
 import {
+  assertPackageIntent,
+  buildPackageTransaction,
+  type BuiltTransaction,
+  type ExpectedPackage,
+} from "../src/publisher/index.js";
+import {
+  partEventsFromLedgerEvents,
+  readPackages,
   statusFromLedgerResult,
-  verifyPublicationTransaction,
-} from "../src/codec/raw-transaction.js";
-import {
-  assertPublicationIntent,
-  buildPublicationTransaction,
-  type BuiltPublication,
-} from "../src/transaction/index.js";
-import { filled32, patternMessage } from "./helpers/bytes.js";
+  verifyTransactionPackages,
+} from "../src/reader/index.js";
+import { filled32, patternParts } from "./helpers/bytes.js";
+import { EXAMPLE_NAME } from "./helpers/generated.js";
 import {
   assembleIntent,
   type CallSpec,
   configFor,
   deployEmitter,
   emitterBinding,
-  emitterTrace,
   LocalChain,
   NETWORK,
+  requestFor,
   starve,
   tamperTranscript,
+  traceOf,
   transcriptsAt,
 } from "./helpers/ledger.js";
 
@@ -39,8 +43,9 @@ type Transcript = ledger.Transcript<ledger.AlignedValue>;
 const SECRET = filled32(0x61);
 let chain: LocalChain;
 let emitter: string;
-let publication: EncodedPublication;
-let built: BuiltPublication;
+let parts: Uint8Array[];
+let built: BuiltTransaction;
+let expected: ExpectedPackage;
 let transcripts: Transcript[];
 let traces: CallProofData[];
 
@@ -53,10 +58,10 @@ const outcome = (run: () => unknown): string => {
   }
 };
 
-/** Publisher check, then wellFormed + apply on a fork, then the wallet-free verifier. */
-const run = (tx: ledger.UnprovenTransaction, segment = built.expected.segment) => {
+/** Publisher check, then wellFormed + apply on a fork, then the reader and the placement check. */
+const run = (tx: ledger.UnprovenTransaction) => {
   const guard = outcome(() => {
-    assertPublicationIntent(tx, { ...built.expected, segment }, "test", built.frozenTranscripts);
+    assertPackageIntent(tx, expected, "test", built.frozenTranscripts[0]);
   });
   const fork = chain.fork();
   const erased = tx.eraseProofs();
@@ -67,16 +72,32 @@ const run = (tx: ledger.UnprovenTransaction, segment = built.expected.segment) =
   } catch (error) {
     wellFormed = `threw: ${error instanceof Error ? error.message : String(error)}`;
   }
-  if (verified === undefined)
-    return { guard, wellFormed, applied: "not applied", events: 0, report: undefined };
+  if (verified === undefined) {
+    return {
+      guard,
+      wellFormed,
+      applied: "not applied",
+      events: 0,
+      read: undefined,
+      raw: undefined,
+    };
+  }
   const before = fork.state.serialize();
   const [after, result] = fork.state.apply(
     verified,
     new ledger.TransactionContext(fork.state, fork.blockContext()),
   );
-  const report = verifyPublicationTransaction(erased, {
-    emitter,
+  const optIns = [{ contract: emitter, name: EXAMPLE_NAME }];
+  const read = readPackages(
+    partEventsFromLedgerEvents(result.events, { network: NETWORK }).events,
+    {
+      optIns,
+    },
+  );
+  const raw = verifyTransactionPackages(erased, {
+    contract: emitter,
     entryPoint: "emitPart",
+    name: EXAMPLE_NAME,
     network: NETWORK,
     status: statusFromLedgerResult(result.type),
     transactionHash: result.events[0]?.source.transactionHash ?? "applied-without-events",
@@ -87,49 +108,73 @@ const run = (tx: ledger.UnprovenTransaction, segment = built.expected.segment) =
     applied: result.type,
     events: result.events.length,
     stateUnchanged: Buffer.compare(Buffer.from(after.serialize()), Buffer.from(before)) === 0,
-    report,
+    read,
+    raw,
   };
 };
 
 const specs = (
-  parts: readonly number[],
-  override?: (part: number) => Partial<CallSpec>,
+  indexes: readonly number[],
+  override?: (index: number) => Partial<CallSpec>,
 ): CallSpec[] =>
-  parts.map((part) => {
-    const trace = traces[part];
-    if (trace === undefined) throw new Error(`no trace ${String(part)}`);
-    return { trace, guaranteed: transcripts[part], ...override?.(part) };
+  indexes.map((index) => {
+    const trace = traces[index];
+    if (trace === undefined) throw new Error(`no trace ${String(index)}`);
+    return { trace, guaranteed: transcripts[index], ...override?.(index) };
   });
+
+const at = (calls: CallSpec[]) => assembleIntent(chain, emitter, expected.segment, calls);
 
 beforeAll(async () => {
   chain = new LocalChain();
   emitter = await deployEmitter(chain, SECRET);
-  publication = encodePublication(patternMessage(417, 21));
-  built = await buildPublicationTransaction(
+  parts = patternParts(3, 21);
+  built = await buildPackageTransaction(
     chain.source(),
-    emitterBinding(SECRET),
-    configFor(emitter),
-    publication,
+    configFor(),
+    requestFor(emitter, emitterBinding(SECRET), parts),
   );
-  transcripts = transcriptsAt(built.transaction, built.expected.segment);
+  const [first] = built.packages;
+  if (first === undefined) throw new Error("no package");
+  expected = first;
+  transcripts = transcriptsAt(built.transaction, expected.segment);
   traces = await Promise.all(
-    publication.parts.map((part) =>
-      emitterTrace(chain, emitter, SECRET, publication.requestId, part.tail),
-    ),
+    parts.map((part) => traceOf(chain, emitter, emitterBinding(SECRET), part)),
   );
 });
 
 describe("failure stages without proofs", () => {
   it("control: the re-assembled all-guaranteed intent passes every stage", () => {
-    const result = run(assembleIntent(chain, emitter, built.expected.segment, specs([0, 1, 2])));
+    const result = run(at(specs([0, 1, 2])));
     expect(result.guard).toBe("accepted");
     expect(result.applied).toBe("success");
-    expect(result.report?.accepted).toHaveLength(1);
+    expect(result.read?.packages[0]?.parts).toEqual(parts);
+    expect(result.raw?.verified).toHaveLength(1);
   });
 
-  it("(c1) a fallible part before guaranteed parts dies at wellFormed (ordering rule)", () => {
+  it.each([1, 2])(
+    "a failing guaranteed part (%i out of gas): the transaction is not included, zero events, state unchanged",
+    (bad) => {
+      const result = run(
+        at(
+          specs([0, 1, 2], (index) =>
+            index === bad ? { guaranteed: starve(transcripts[index] as Transcript) } : {},
+          ),
+        ),
+      );
+      expect(result.guard).toMatch(/call \d guaranteed transcript changed since assembly/);
+      expect(result.applied).toBe("failure");
+      expect(result.events).toBe(0);
+      expect(result.stateUnchanged).toBe(true);
+      expect(result.read?.packages).toEqual([]);
+      expect(result.raw?.issues.join()).toMatch(/status FAILURE is not an inclusion/);
+      expect(result.raw?.verified).toHaveLength(0);
+    },
+  );
+
+  it("a fallible part before guaranteed parts dies at wellFormed (ordering rule)", () => {
     const result = run(
-      assembleIntent(chain, emitter, built.expected.segment, [
+      at([
         ...specs([0], () => ({ guaranteed: undefined, fallible: transcripts[0] })),
         ...specs([1, 2]),
       ]),
@@ -139,9 +184,9 @@ describe("failure stages without proofs", () => {
     expect(result.events).toBe(0);
   });
 
-  it("(c1b) a succeeding fallible last part: the ledger applies it, the publisher check and the verifier refuse it", () => {
+  it("a succeeding fallible last part: the ledger applies it; the publisher and the placement check refuse it", () => {
     const result = run(
-      assembleIntent(chain, emitter, built.expected.segment, [
+      at([
         ...specs([0, 1]),
         ...specs([2], () => ({ guaranteed: undefined, fallible: transcripts[2] })),
       ]),
@@ -149,14 +194,17 @@ describe("failure stages without proofs", () => {
     expect(result.guard).toMatch(/call 3 has a fallible transcript/);
     expect(result.applied).toBe("success");
     expect(result.events).toBe(3);
-    expect(result.report?.accepted).toHaveLength(0);
-    expect(result.report?.read.results[0]?.status).toBe(ReadStatus.Rejected);
-    expect(result.report?.read.results[0]?.issues.join()).toMatch(/fallible transcript/);
+    // The events alone look like a normal package; the raw transaction shows the placement.
+    expect(result.read?.packages[0]?.parts).toHaveLength(3);
+    expect(result.raw?.packages[0]?.placement.join()).toMatch(
+      /call 2 of emitPart is not guaranteed-only \(fallible transcript\)/,
+    );
+    expect(result.raw?.verified).toHaveLength(0);
   });
 
-  it("(c2b) a failing fallible last part gives partialSuccess with two events: not accepted", () => {
+  it("a failing fallible last part gives partialSuccess with two events: not verified", () => {
     const result = run(
-      assembleIntent(chain, emitter, built.expected.segment, [
+      at([
         ...specs([0, 1]),
         ...specs([2], () => ({
           guaranteed: undefined,
@@ -166,67 +214,47 @@ describe("failure stages without proofs", () => {
     );
     expect(result.applied).toBe("partialSuccess");
     expect(result.events).toBe(2);
-    expect(result.report?.accepted).toHaveLength(0);
+    expect(result.read?.packages[0]?.parts).toHaveLength(2);
+    expect(result.raw?.verified).toHaveLength(0);
   });
 
-  it.each([1, 2])(
-    "(c3) guaranteed part %i out of gas: failure, zero events, state unchanged",
-    (bad) => {
-      const result = run(
-        assembleIntent(
-          chain,
-          emitter,
-          built.expected.segment,
-          specs([0, 1, 2], (part) =>
-            part === bad ? { guaranteed: starve(transcripts[part] as Transcript) } : {},
-          ),
-        ),
-      );
-      expect(result.guard).toMatch(/call \d guaranteed transcript changed since assembly/);
-      expect(result.applied).toBe("failure");
-      expect(result.events).toBe(0);
-      expect(result.stateUnchanged).toBe(true);
-      expect(result.report?.issues.join()).toMatch(/status FAILURE is not an inclusion/);
-      expect(result.report?.accepted).toHaveLength(0);
-    },
-  );
-
-  it("(a1) one event byte changed after partitioning: publisher check refuses; verifier rejects the hash", () => {
+  it("one event byte changed after partitioning: the publisher refuses; the placement check agrees with the events", () => {
     const result = run(
-      assembleIntent(
-        chain,
-        emitter,
-        built.expected.segment,
-        specs([0, 1, 2], (part) =>
-          part === 1 ? { guaranteed: tamperTranscript(transcripts[1] as Transcript) } : {},
+      at(
+        specs([0, 1, 2], (index) =>
+          index === 1 ? { guaranteed: tamperTranscript(transcripts[1] as Transcript) } : {},
         ),
       ),
     );
     expect(result.guard).toMatch(/call 2 emits bytes other than part 2/);
     expect(result.applied).toBe("success");
-    expect(result.report?.read.results[0]?.issues.join()).toMatch(/does not match the request ID/);
-    expect(result.report?.accepted).toHaveLength(0);
+    // The rule carries no checksum: the merged payload is what was emitted; payload
+    // integrity is the adopting protocol's.
+    expect(result.read?.packages[0]?.parts[1]).not.toEqual(parts[1]);
+    expect(result.raw?.verified[0]?.payload).toEqual(result.read?.packages[0]?.payload);
   });
 
-  it("(d1) a dropped part: publisher check refuses; the verifier sees an incomplete publication", () => {
-    const result = run(assembleIntent(chain, emitter, built.expected.segment, specs([0, 1])));
-    expect(result.guard).toMatch(/has 2 actions, expected 3/);
-    expect(result.report?.read.results[0]?.status).toBe(ReadStatus.Incomplete);
-    expect(result.report?.accepted).toHaveLength(0);
+  it("a dropped, a repeated or a reordered part: the publisher refuses before any proof", () => {
+    expect(run(at(specs([0, 1]))).guard).toMatch(/has 2 actions, expected 3/);
+    expect(run(at(specs([0, 1, 2, 0]))).guard).toMatch(/has 4 actions, expected 3/);
+    const reordered = run(at(specs([2, 0, 1])));
+    expect(reordered.guard).toMatch(/call 1 emits bytes other than part 1/);
+    // Readers merge in call order: the reordered package is a different payload.
+    expect(reordered.read?.packages[0]?.parts).toEqual([parts[2], parts[0], parts[1]]);
   });
 
-  it("(d2) the same part emitted twice: publisher check refuses; the verifier rejects the extra part", () => {
-    const result = run(assembleIntent(chain, emitter, built.expected.segment, specs([0, 1, 2, 0])));
-    expect(result.guard).toMatch(/has 4 actions, expected 3/);
-    expect(result.applied).toBe("success");
-    expect(result.report?.read.results[0]?.issues).toContain("part 1 was emitted 2 times");
-    expect(result.report?.accepted).toHaveLength(0);
-  });
-
-  it("(d3) reordered calls: publisher check refuses (order is part of the expectation)", () => {
-    const result = run(assembleIntent(chain, emitter, built.expected.segment, specs([2, 0, 1])));
-    expect(result.guard).toMatch(/call 1 emits bytes other than part 1/);
-    // Order inside a transaction does not change the message: the reader orders by ppp.
-    expect(result.report?.accepted).toHaveLength(1);
+  it("an included intent cannot be included again (replay): the second application fails", () => {
+    const fork = chain.fork();
+    const tx = built.transaction.eraseProofs();
+    expect(fork.apply(tx).type).toBe("success");
+    let again: string;
+    try {
+      const result = fork.apply(tx);
+      again = `${result.type}: ${String(result.error)}`;
+    } catch (error) {
+      again = `refused: ${error instanceof Error ? error.message : String(error)}`;
+    }
+    // The second application fails (not included): the intent already exists.
+    expect(again).toMatch(/^failure: .*replay protection.*IntentAlreadyExists/);
   });
 });

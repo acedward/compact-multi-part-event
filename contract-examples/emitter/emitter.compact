@@ -1,0 +1,24 @@
+pragma language_version >= 0.26;
+
+import CompactStandardLibrary;
+import "../whitelist/EmitterWhitelist";
+
+// Reference adopter. Its (example) protocol emits Misc events named
+// "example:message[v1]" and declares that this name follows the multi-part rule, so
+// readers merge all such events of one intent into one message payload.
+//
+// emitPart checks the whitelist, then emits exactly one event. It writes no ledger
+// state, so every part of a package runs from the same pre-state.
+//
+// `authority` is emitterAuthorityOf(secret), computed off-chain; the secret never
+// reaches the chain.
+constructor(authority: Bytes<32>) {
+  initializeEmitterAuthority(authority);
+}
+
+export { emitterAuthorityOf, emitterAuthority };
+
+export circuit emitPart(payload: Bytes<256>): [] {
+  assertEmitterAuthority();
+  emit (Misc { name: pad(32, "example:message[v1]"), payload: disclose(payload) });
+}

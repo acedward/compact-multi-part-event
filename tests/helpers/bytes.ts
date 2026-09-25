@@ -1,6 +1,6 @@
 import { createHash } from "node:crypto";
 
-/** Deterministic test message: byte i = (i * 37 + 11 + seed) mod 256. */
+/** Deterministic test bytes: byte i = (i * 37 + 11 + seed) mod 256. */
 export const patternMessage = (length: number, seed = 0): Uint8Array =>
   Uint8Array.from({ length }, (_, index) => (index * 37 + 11 + seed) & 0xff);
 
@@ -30,27 +30,28 @@ export const ascii = (text: string): Uint8Array => new TextEncoder().encode(text
 /** A 32-byte value filled with one byte (handy distinct secrets). */
 export const filled32 = (byte: number): Uint8Array => new Uint8Array(32).fill(byte);
 
-const threeDigits = (value: number): string => String(value).padStart(3, "0");
-
-/**
- * Test-local tail construction straight from the normative wire table (not the
- * library writer): "ppp:nnn" ASCII in bytes 0..6, byte 7 zero, length u64 LE in
- * 8..15, 208 data bytes in 16..223, zero padding.
- */
-export const specTails = (message: Uint8Array): Uint8Array[] => {
-  const total = Math.max(1, Math.ceil(message.byteLength / 208));
-  return Array.from({ length: total }, (_, index) => {
-    const tail = new Uint8Array(224);
-    tail.set(ascii(`${threeDigits(index + 1)}:${threeDigits(total)}`), 0);
-    new DataView(tail.buffer).setBigUint64(8, BigInt(message.byteLength), true);
-    tail.set(message.subarray(index * 208, (index + 1) * 208), 16);
-    return tail;
+/** `count` deterministic 256-byte parts, each distinct (part k starts with the byte k). */
+export const patternParts = (count: number, seed = 0): Uint8Array[] =>
+  Array.from({ length: count }, (_, index) => {
+    const part = patternMessage(256, seed * 131 + index * 17);
+    part[0] = index + 1;
+    return part;
   });
+
+/** A 256-byte part: `prefix` then zero bytes (so the ledger trims its trailing zeros). */
+export const shortPart = (prefix: Uint8Array): Uint8Array => {
+  const part = new Uint8Array(256);
+  part.set(prefix);
+  return part;
 };
 
-/** `pad("mip-xxxx[v1]:ppp:nnn", 32)`, from the normative wire table. */
-export const specName = (position: number, total: number): Uint8Array => {
-  const name = new Uint8Array(32);
-  name.set(ascii(`mip-xxxx[v1]:${threeDigits(position)}:${threeDigits(total)}`), 0);
-  return name;
+/** Concatenate byte arrays into one Uint8Array. */
+export const concatBytes = (chunks: readonly Uint8Array[]): Uint8Array => {
+  const out = new Uint8Array(chunks.reduce((sum, chunk) => sum + chunk.byteLength, 0));
+  let offset = 0;
+  for (const chunk of chunks) {
+    out.set(chunk, offset);
+    offset += chunk.byteLength;
+  }
+  return out;
 };

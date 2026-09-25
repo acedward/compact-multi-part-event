@@ -6,25 +6,20 @@ const source = (path: string): string => fileURLToPath(new URL(path, import.meta
 
 export default defineConfig({
   resolve: {
-    // The consumer example imports the library by its package name, as an external
+    // The notice-board example imports the library by its package name, as an external
     // project does; inside this repository those names resolve to the sources.
     alias: [
       {
-        find: /^compact-multi-segment-emit\/codec\/raw-transaction$/,
-        replacement: source("./src/codec/raw-transaction.ts"),
-      },
-      { find: /^compact-multi-segment-emit\/codec$/, replacement: source("./src/codec/index.ts") },
-      {
-        find: /^compact-multi-segment-emit\/transaction$/,
-        replacement: source("./src/transaction/index.ts"),
+        find: /^compact-multi-segment-emit\/reader$/,
+        replacement: source("./src/reader/index.ts"),
       },
       {
-        find: /^compact-multi-segment-emit\/contract$/,
-        replacement: source("./src/contract/index.ts"),
+        find: /^compact-multi-segment-emit\/publisher$/,
+        replacement: source("./src/publisher/index.ts"),
       },
       {
-        find: /^compact-multi-segment-emit\/adapters$/,
-        replacement: source("./src/adapters/index.ts"),
+        find: /^compact-multi-segment-emit\/indexer$/,
+        replacement: source("./src/indexer/index.ts"),
       },
     ],
   },

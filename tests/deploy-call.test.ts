@@ -1,9 +1,9 @@
 /**
- * Deployment and single-call transactions: verifier keys installed for every provable
- * circuit, a one-key maintenance authority, the address known before submission,
- * the deploy-intent check; a registration (`register3` of the registry test contract)
- * as one guaranteed call that is applied and changes the registry; the call-intent
- * check; and finalize/submit with the same discipline as publications.
+ * deploy-tools' deployment and single-call transactions: verifier keys installed for
+ * every provable circuit, a one-key maintenance authority, the address known before
+ * submission, the deploy-intent check; the notice board's state-changing `pin` as one
+ * guaranteed call that is applied and changes the board; the call-intent check; and
+ * finalize/submit (the publisher's generic path) with the same discipline as packages.
  */
 import {
   ContractState as RuntimeContractState,
@@ -12,37 +12,53 @@ import {
 import * as ledger from "@midnightntwrk/ledger-v9";
 import { beforeAll, describe, expect, it } from "vitest";
 
-import { encodePublication } from "../src/codec/index.js";
-import { messageOwnerOf, type MessageOwnerPrivateState } from "../src/contract/index.js";
+import { emitterAuthorityOf } from "../contract-examples/whitelist/whitelist.js";
+import { buildCircuitCallTransaction, callIntentCheck } from "../deploy-tools/call.js";
+import { buildDeployTransaction, deployIntentCheck } from "../deploy-tools/deploy.js";
 import {
-  buildCircuitCallTransaction,
-  buildDeployTransaction,
-  callIntentCheck,
-  deployIntentCheck,
   finalizeTransaction,
-  PublicationCheckError,
+  PackageCheckError,
+  type PublicationBalancer,
+  type PublicationProver,
   submitSavedTransaction,
-} from "../src/transaction/index.js";
-import { filled32, patternMessage, toHex } from "./helpers/bytes.js";
+} from "../src/publisher/index.js";
+import { filled32, toHex } from "./helpers/bytes.js";
 import {
+  BOARD_VERIFIER_KEYS,
   COIN_PUBLIC_KEY,
   EMITTER_VERIFIER_KEY,
   emitterInitialState,
-  registryBinding,
-  registryContract,
+  noticeBoardModule,
 } from "./helpers/generated.js";
 import { LocalChain, NETWORK } from "./helpers/ledger.js";
-import { standInBalancer, standInProver } from "./helpers/offline-services.js";
+
+type Proven = ledger.Transaction<ledger.SignatureEnabled, ledger.Proof, ledger.PreBinding>;
+type BoardState = { emitterSecret: Uint8Array };
 
 const maintenance = ledger.signatureVerifyingKey(ledger.sampleSigningKey());
 const ttl = () => new Date(Date.now() + 10 * 60 * 1000);
+const standInProver: PublicationProver = {
+  proveTx: (tx) => Promise.resolve(tx as unknown as Proven),
+};
+const standInBalancer: PublicationBalancer = {
+  balanceTx: (tx) =>
+    Promise.resolve(
+      (
+        tx as unknown as ledger.UnprovenTransaction
+      ).bind() as unknown as ledger.FinalizedTransaction,
+    ),
+};
+const boardContract = () =>
+  new noticeBoardModule.Contract<BoardState>({
+    emitterSecret: ({ privateState }) => [privateState, privateState.emitterSecret],
+  });
 
 describe("deployment transactions", () => {
   it("installs every verifier key and the maintenance authority, and applies", async () => {
     const chain = new LocalChain();
     const built = buildDeployTransaction({
       network: NETWORK,
-      initialState: await emitterInitialState(filled32(0x11)),
+      initialState: await emitterInitialState(emitterAuthorityOf(filled32(0x11))),
       verifierKeys: { emitPart: EMITTER_VERIFIER_KEY },
       maintenanceCommittee: [maintenance],
       ttl: new Date(chain.time.getTime() + 600_000),
@@ -59,7 +75,7 @@ describe("deployment transactions", () => {
   });
 
   it("refuses a missing or unknown verifier key and an empty committee", async () => {
-    const initialState = await emitterInitialState(filled32(0x12));
+    const initialState = await emitterInitialState(emitterAuthorityOf(filled32(0x12)));
     const base = {
       network: NETWORK,
       initialState,
@@ -88,7 +104,7 @@ describe("deployment transactions", () => {
     const make = async (byte: number) =>
       buildDeployTransaction({
         network: NETWORK,
-        initialState: await emitterInitialState(filled32(byte)),
+        initialState: await emitterInitialState(emitterAuthorityOf(filled32(byte))),
         verifierKeys: { emitPart: EMITTER_VERIFIER_KEY },
         maintenanceCommittee: [maintenance],
         ttl: ttl(),
@@ -104,100 +120,81 @@ describe("deployment transactions", () => {
   });
 });
 
-describe("single-call transactions (registration)", () => {
+describe("single-call transactions (the notice board's pin)", () => {
   const OWNER = filled32(0x31);
   let chain: LocalChain;
-  let registry: string;
+  let boardAddress: string;
 
   beforeAll(async () => {
     chain = new LocalChain();
-    const initial = await registryContract().initialState(
-      createConstructorContext<MessageOwnerPrivateState>(
-        { messageOwnerSecret: OWNER },
-        COIN_PUBLIC_KEY,
-      ),
+    const initial = await boardContract().initialState(
+      createConstructorContext<BoardState>({ emitterSecret: OWNER }, COIN_PUBLIC_KEY),
+      emitterAuthorityOf(OWNER),
     );
-    const circuits = ledger.ContractState.deserialize(initial.currentContractState.serialize())
-      .operations()
-      .map((name) => (typeof name === "string" ? name : new TextDecoder().decode(name)));
-    // Offline only: any non-empty key bytes install; proofs are erased and never checked.
     const built = buildDeployTransaction({
       network: NETWORK,
       initialState: initial.currentContractState,
-      verifierKeys: Object.fromEntries(circuits.map((name) => [name, EMITTER_VERIFIER_KEY])),
+      verifierKeys: BOARD_VERIFIER_KEYS,
       maintenanceCommittee: [maintenance],
       ttl: new Date(chain.time.getTime() + 600_000),
     });
+    expect(built.operations).toEqual(["emitPart", "pin"]);
     expect(chain.apply(built.transaction.eraseProofs()).type).toBe("success");
-    registry = built.address;
+    boardAddress = built.address;
   });
 
-  const plan = (message: Uint8Array, secret = OWNER) => {
-    const publication = encodePublication(message);
-    return {
-      publication,
-      plan: {
-        network: NETWORK,
-        address: registry,
-        circuit: "register3",
-        coinPublicKey: COIN_PUBLIC_KEY,
-        privateState: { messageOwnerSecret: secret },
-        execute: (
-          context: Parameters<
-            ReturnType<typeof registryContract>["impureCircuits"]["register3"]
-          >[0],
-        ) =>
-          registryContract().impureCircuits.register3(
-            context,
-            publication.requestId,
-            publication.parts.map((part) => part.tail),
-          ),
-      },
-    };
-  };
+  const plan = (digest: Uint8Array, secret = OWNER) => ({
+    network: NETWORK,
+    address: boardAddress,
+    circuit: "pin",
+    coinPublicKey: COIN_PUBLIC_KEY,
+    privateState: { emitterSecret: secret },
+    execute: (context: Parameters<ReturnType<typeof boardContract>["impureCircuits"]["pin"]>[0]) =>
+      boardContract().impureCircuits.pin(context, digest),
+  });
 
-  it("builds one guaranteed call, applies it, and the registry holds the owner commitment", async () => {
-    const { publication, plan: callPlan } = plan(patternMessage(417));
-    const built = await buildCircuitCallTransaction(chain.source(), callPlan);
+  it("builds one guaranteed call, applies it, and the board's state changes", async () => {
+    const digest = filled32(0x51);
+    const built = await buildCircuitCallTransaction(chain.source(), plan(digest));
     callIntentCheck(built)(built.transaction, "before proving");
     expect(built.segment).toBeGreaterThan(0);
     const result = chain.apply(built.transaction.eraseProofs());
     expect(result.type, String(result.error)).toBe("success");
-    const state = RuntimeContractState.deserialize(
-      chain.state.index(registry)?.serialize() ?? new Uint8Array(),
+    const view = noticeBoardModule.ledger(
+      RuntimeContractState.deserialize(
+        chain.state.index(boardAddress)?.serialize() ?? new Uint8Array(),
+      ).data,
     );
-    const ledgerView = registryBinding.ledger(state.data);
-    expect(ledgerView.messageOwner.member(publication.requestId)).toBe(true);
-    expect(toHex(ledgerView.messageOwner.lookup(publication.requestId))).toBe(
-      toHex(messageOwnerOf(OWNER)),
-    );
+    expect(view.pinnedCount).toBe(1n);
+    expect(toHex(view.pinnedDigest)).toBe(toHex(digest));
   });
 
-  it("a second registration of the same id fails while executing, before any transaction exists", async () => {
+  it("a caller without the secret fails while executing, before any transaction exists", async () => {
     await expect(
-      buildCircuitCallTransaction(chain.source(), plan(patternMessage(417)).plan),
-    ).rejects.toThrow(/already registered/);
+      buildCircuitCallTransaction(chain.source(), plan(filled32(0x52), filled32(0x99))),
+    ).rejects.toThrow(/caller is not the emitter authority/);
   });
 
   it("the call-intent check rejects another segment and a transaction with extra calls to the circuit", async () => {
-    const built = await buildCircuitCallTransaction(chain.source(), plan(patternMessage(418)).plan);
+    const built = await buildCircuitCallTransaction(chain.source(), plan(filled32(0x53)));
     expect(() =>
       callIntentCheck({ ...built, segment: (built.segment % 60000) + 1 })(built.transaction, "x"),
     ).toThrow(/no intent at segment/);
-    const other = await buildCircuitCallTransaction(chain.source(), plan(patternMessage(419)).plan);
+    const other = await buildCircuitCallTransaction(chain.source(), plan(filled32(0x54)));
+    if (other.segment === built.segment) return;
     const merged = built.transaction.merge(other.transaction);
-    expect(() => callIntentCheck(built)(merged, "after balancing")).toThrow(/also calls register3/);
+    expect(() => callIntentCheck(built)(merged, "after balancing")).toThrow(/also calls pin/);
   });
 
   it("finalizes with the intent check at every stage and submits exactly the saved bytes", async () => {
-    const built = await buildCircuitCallTransaction(chain.source(), plan(patternMessage(420)).plan);
+    const built = await buildCircuitCallTransaction(chain.source(), plan(filled32(0x55)));
     const check = callIntentCheck(built);
     const record = await finalizeTransaction(
       { prover: standInProver, balancer: standInBalancer },
       built.transaction,
       {
         network: NETWORK,
-        purpose: "register3",
+        purpose: "pin",
         proofTimeoutMs: 1000,
         ttl: built.ttl,
         ledgerParameters: built.ledgerParameters,
@@ -227,7 +224,7 @@ describe("single-call transactions (registration)", () => {
       ),
     ).rejects.toThrow(/recorded identifiers/);
     await expect(submitSavedTransaction(submitter, record, check)).rejects.toThrow(
-      PublicationCheckError,
+      PackageCheckError,
     );
     expect(submitted).toHaveLength(1);
   });

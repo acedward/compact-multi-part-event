@@ -18,12 +18,11 @@
     "allowJs": false,
     "noEmit": true,
     "paths": {
-      "compact-multi-segment-emit/codec": ["./src/codec/index.ts"],
-      "compact-multi-segment-emit/codec/raw-transaction": ["./src/codec/raw-transaction.ts"],
-      "compact-multi-segment-emit/transaction": ["./src/transaction/index.ts"],
-      "compact-multi-segment-emit/contract": ["./src/contract/index.ts"],
-      "compact-multi-segment-emit/adapters": ["./src/adapters/index.ts"]
+      "compact-multi-segment-emit/reader": ["./src/reader/index.ts"],
+      "compact-multi-segment-emit/publisher": ["./src/publisher/index.ts"],
+      "compact-multi-segment-emit/indexer": ["./src/indexer/index.ts"]
     }
   },
-  "include": ["src", "tests", "examples", "vitest.config.ts"]
+  "include": ["src", "tests", "contract-examples", "deploy-tools", "vitest.config.ts"],
+  "exclude": ["contract-examples/*/dist", "contract-examples/*/node_modules"]
 }

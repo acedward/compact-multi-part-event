@@ -1,0 +1,39 @@
+pragma language_version >= 0.26;
+
+// Example access control, used by both example adopters; the multi-part rule does not
+// need it and does not define it. It allows ONE emitter: the constructor stores a
+// commitment to the emitter's secret, and every guarded circuit proves knowledge of
+// that secret. The contract's maintenance authority outranks it (it can replace any
+// circuit), which is documented, not prevented.
+module EmitterWhitelist {
+  import CompactStandardLibrary;
+
+  // Sealed: written only during construction, so every part of a package reads the
+  // same unchanging value.
+  export sealed ledger emitterAuthority: Bytes<32>;
+
+  // The emitter's secret, from its local witness. It is a private proof input, so the
+  // proof server sees it: prove locally.
+  export witness emitterSecret(): Bytes<32>;
+
+  // Commitment for a secret. Compute it off-chain and pass the result to the
+  // constructor; the secret never reaches the chain.
+  export pure circuit emitterAuthorityOf(secret: Bytes<32>): Bytes<32> {
+    return persistentHash<Vector<2, Bytes<32>>>(
+      [pad(32, "example:emitter-authority:v1"), secret]
+    );
+  }
+
+  // Call once, from the importing contract's constructor.
+  export circuit initializeEmitterAuthority(authority: Bytes<32>): [] {
+    assert(authority != default<Bytes<32>>, "EmitterWhitelist: zero authority");
+    emitterAuthority = disclose(authority);
+  }
+
+  // A caller without the secret fails here while executing, before any proof or
+  // event exists.
+  export circuit assertEmitterAuthority(): [] {
+    assert(emitterAuthority == emitterAuthorityOf(emitterSecret()),
+           "EmitterWhitelist: caller is not the emitter authority");
+  }
+}
