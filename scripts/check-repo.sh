@@ -3,8 +3,11 @@
 # needs to build, check, use and verify it; nothing else).
 #
 # 1. The reserved three-letter proposal label in upper case (ASCII bytes 4d 49 50)
-#    appears in no path and no file content (binary files included).
-# 2. The lower-case placeholder of the standard's name appears only in README.md.
+#    appears in no path and no file content (binary files included), except the
+#    proposal draft next to the README (${DRAFT}), which is named after the label and
+#    uses it throughout. Commit messages never carry the label.
+# 2. The lower-case placeholder of the standard's name appears only in README.md and the
+#    proposal draft.
 # 3. Every path (tracked, or untracked and not ignored) is one the layout allows, and
 #    every required file exists. Generated output (dist/, build/, managed/,
 #    node_modules/, .cache/) is ignored by .gitignore and never committed.
@@ -17,11 +20,14 @@ cd "$(dirname "$0")/.."
 
 upper=$'\x4d\x49\x50'
 placeholder="$(printf 'mi%s-xxxx' 'p')"
-PLACEHOLDER_ALLOWED=("README.md")
+# The proposal draft: the one file that may carry the label, in its name and content.
+DRAFT="${upper}-SPEC-DRAFT.md"
+PLACEHOLDER_ALLOWED=("README.md" "${DRAFT}")
 
 # The layout: fixed files (all required) ...
 FIXED=(
   README.md
+  "${DRAFT}"
   LICENSE
   package.json
   package-lock.json
@@ -98,13 +104,15 @@ for file in "${files[@]}"; do
     echo "outside the repository layout: ${file}" >&2
     status=1
   fi
-  if [[ "${file}" == *"${upper}"* ]]; then
-    echo "reserved label in path: ${file}" >&2
-    status=1
-  fi
-  if LC_ALL=C grep -q -a -F -- "${upper}" "${file}"; then
-    echo "reserved label in content: ${file}" >&2
-    status=1
+  if [[ "${file}" != "${DRAFT}" ]]; then
+    if [[ "${file}" == *"${upper}"* ]]; then
+      echo "reserved label in path: ${file}" >&2
+      status=1
+    fi
+    if LC_ALL=C grep -q -a -F -- "${upper}" "${file}"; then
+      echo "reserved label in content: ${file}" >&2
+      status=1
+    fi
   fi
   if LC_ALL=C grep -q -a -F -- "${placeholder}" "${file}"; then
     allowed=0
@@ -127,6 +135,7 @@ if [[ "${1:-}" == "--history" ]] && git rev-parse --verify HEAD >/dev/null 2>&1;
   while read -r object type path; do
     [[ "${type}" == "blob" ]] || continue
     blobs=$((blobs + 1))
+    [[ "${path}" == "${DRAFT}" ]] && continue
     if git cat-file blob "${object}" | LC_ALL=C grep -q -a -F -- "${upper}"; then
       echo "reserved label in history blob ${object} (${path})" >&2
       status=1
