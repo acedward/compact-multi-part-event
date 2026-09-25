@@ -1,0 +1,33 @@
+pragma language_version >= 0.26;
+
+import CompactStandardLibrary;
+import "../whitelist/EmitterWhitelist";
+
+// Second adopter: a notice board with state of its own. Its (example) protocol emits
+// notices as Misc events named "notice-board:notice[v1]" and declares that this name
+// follows the multi-part rule.
+//
+// emitPart only checks the whitelist and emits: it never writes the board's state, so
+// every part of a package runs from the same pre-state. The board's state changes
+// only through `pin`, in a transaction of its own; never batch `pin` with parts.
+export ledger pinnedCount: Counter;
+export ledger pinnedDigest: Bytes<32>;
+
+constructor(authority: Bytes<32>) {
+  initializeEmitterAuthority(authority);
+}
+
+export { emitterAuthorityOf, emitterAuthority };
+
+export circuit emitPart(payload: Bytes<256>): [] {
+  assertEmitterAuthority();
+  emit (Misc { name: pad(32, "notice-board:notice[v1]"), payload: disclose(payload) });
+}
+
+// Pin a notice by a digest the board's protocol defines (for example the SHA-256 of a
+// notice published earlier).
+export circuit pin(digest: Bytes<32>): [] {
+  assertEmitterAuthority();
+  pinnedDigest = disclose(digest);
+  pinnedCount.increment(1);
+}

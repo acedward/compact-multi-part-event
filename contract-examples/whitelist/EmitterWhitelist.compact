@@ -1,18 +1,19 @@
 pragma language_version >= 0.26;
 
-// Example access control, not part of the event format: allow ONE emitter
-// by storing a commitment to its secret at deployment. The pattern assumes
-// one user builds and emits each publication; it does not protect a
-// contract that lets several users emit (see MessageRegistry for that).
+// Example access control, used by both example adopters; the multi-part rule does not
+// need it and does not define it. It allows ONE emitter: the constructor stores a
+// commitment to the emitter's secret, and every guarded circuit proves knowledge of
+// that secret. The contract's maintenance authority outranks it (it can replace any
+// circuit), which is documented, not prevented.
 module EmitterWhitelist {
   import CompactStandardLibrary;
 
-  // Sealed: written only during construction, so every part of a batch
-  // reads the same unchanging value.
+  // Sealed: written only during construction, so every part of a package reads the
+  // same unchanging value.
   export sealed ledger emitterAuthority: Bytes<32>;
 
-  // The emitter's secret, from its local witness. It is a private proof
-  // input, so the proof server sees it: prove locally.
+  // The emitter's secret, from its local witness. It is a private proof input, so the
+  // proof server sees it: prove locally.
   export witness emitterSecret(): Bytes<32>;
 
   // Commitment for a secret. Compute it off-chain and pass the result to the
@@ -29,8 +30,8 @@ module EmitterWhitelist {
     emitterAuthority = disclose(authority);
   }
 
-  // A caller without the secret fails here while executing, before any
-  // proof or event exists.
+  // A caller without the secret fails here while executing, before any proof or
+  // event exists.
   export circuit assertEmitterAuthority(): [] {
     assert(emitterAuthority == emitterAuthorityOf(emitterSecret()),
            "EmitterWhitelist: caller is not the emitter authority");

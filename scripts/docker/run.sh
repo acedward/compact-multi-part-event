@@ -8,8 +8,8 @@
 # every run, so dependencies and compiler output stay on the Linux filesystem.
 # (Bind-mounting the tree with a nested node_modules volume is unreliable under
 # Docker Desktop: the nested mount can disappear while the container runs.)
-# Generated output inside the volume (node_modules, contracts/managed,
-# tests/contracts/managed, examples/consumer/managed, build) survives between runs.
+# Generated output inside the volume (node_modules, contract-examples/*/managed,
+# tests/contracts/managed, build) survives between runs.
 #
 # Optional environment:
 #   CMSE_EXPORT           space-separated repository-relative paths to copy back
@@ -38,22 +38,23 @@ if tar --version 2>/dev/null | grep -q bsdtar; then tar_flags+=(--no-mac-metadat
 COPYFILE_DISABLE=1 tar -C "${CMSE_REPO_DIR}" ${tar_flags[@]+"${tar_flags[@]}"} \
   --exclude=./.git --exclude=./node_modules --exclude=./.cache \
   --exclude=./dist --exclude=./build \
-  --exclude=./contracts/managed --exclude=./tests/contracts/managed \
-  --exclude=./examples/consumer/managed \
+  --exclude=./contract-examples/emitter/managed --exclude=./contract-examples/notice-board/managed \
+  --exclude=./contract-examples/notice-board/dist --exclude=./contract-examples/notice-board/node_modules \
+  --exclude=./tests/contracts/managed \
   -cf - . |
   docker run --rm -i --label "${CMSE_LABEL}" --name "${CMSE_DOCKER_PREFIX}-sync-in" -v "${CMSE_WORK_VOLUME}:/work" \
     "${CMSE_NODE_IMAGE}" bash -c '
       set -euo pipefail
       mkdir -p /work/repo /work/keep
       cd /work/repo
-      for kept in contracts/managed tests/contracts/managed examples/consumer/managed; do
+      for kept in contract-examples/emitter/managed contract-examples/notice-board/managed tests/contracts/managed; do
         if [[ -d "${kept}" ]]; then mkdir -p "/work/keep/$(dirname "${kept}")"; mv "${kept}" "/work/keep/${kept}"; fi
       done
       find . -mindepth 1 -maxdepth 1 ! -name node_modules ! -name build ! -name dist \
         -exec rm -rf {} +
       tar -xf -
       find . -name "._*" -delete
-      for kept in contracts/managed tests/contracts/managed examples/consumer/managed; do
+      for kept in contract-examples/emitter/managed contract-examples/notice-board/managed tests/contracts/managed; do
         if [[ -d "/work/keep/${kept}" ]]; then mkdir -p "$(dirname "${kept}")"; mv "/work/keep/${kept}" "${kept}"; fi
       done
       rm -rf /work/keep'
