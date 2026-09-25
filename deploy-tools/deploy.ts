@@ -6,8 +6,8 @@
  * The maintenance authority outranks any access control in the contract: its holder
  * can remove every circuit and install new ones (for example an `emitPart` without the
  * whitelist check). Following the SDK's usual deployment, the authority is one
- * signing key held by the deployer (threshold 1). Its verifying key is public
- * evidence; the signing key belongs in a protected file.
+ * signing key held by the deployer (threshold 1). Its verifying key is public (it
+ * goes into the deployment record); the signing key belongs in a protected file.
  *
  * The contract address is known before submission, so it can be recorded before the
  * transaction is sent (a lost address cannot be recovered afterwards).

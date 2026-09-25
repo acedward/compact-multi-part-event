@@ -17,6 +17,8 @@ import { join } from "node:path";
 
 import { NodeZkConfigProvider } from "@midnight-ntwrk/midnight-js-node-zk-config-provider";
 
+import { assertVerifierKeyEquals } from "../src/cli/verifier-key.js";
+
 /** A mismatch between local artifacts and what is expected. */
 export class ArtifactMismatchError extends Error {
   constructor(detail: string) {
@@ -74,24 +76,6 @@ export const checkArtifactHashes = (artifactDir: string, sha256SumsPath: string)
   return [...sums.keys()];
 };
 
-/**
- * Require a local verifier key to equal an expected one (the deployed key, or the
- * repository's committed key).
- *
- * @throws {ArtifactMismatchError} Naming both SHA-256 values.
- */
-export const assertVerifierKeyEquals = (
-  local: Uint8Array,
-  expected: Uint8Array,
-  label: string,
-): void => {
-  if (local.byteLength !== expected.byteLength || !local.every((b, i) => b === expected[i])) {
-    throw new ArtifactMismatchError(
-      `${label}: verifier key SHA-256 ${sha256Hex(local)} differs from the expected ${sha256Hex(expected)}`,
-    );
-  }
-};
-
 /** Options for {@link zkConfigForContract}. */
 export interface ZkConfigOptions {
   /** `compactc` output directory with `keys/` and `zkir/` (e.g. `build/zk/emitter`). */
@@ -104,7 +88,8 @@ export interface ZkConfigOptions {
 
 /**
  * A midnight-js zk-config provider over a `compactc` output directory, after checking
- * the artifacts: listed hashes, and each expected verifier key.
+ * the artifacts: listed hashes, and each expected verifier key (byte for byte; a
+ * mismatch throws `VerifierKeyMismatchError` naming both SHA-256 values).
  */
 export const zkConfigForContract = (options: ZkConfigOptions): NodeZkConfigProvider<string> => {
   if (!existsSync(join(options.artifactDir, "keys"))) {
@@ -120,6 +105,3 @@ export const zkConfigForContract = (options: ZkConfigOptions): NodeZkConfigProvi
   }
   return new NodeZkConfigProvider<string>(options.artifactDir);
 };
-
-/** SHA-256 hex of a verifier key, as recorded in evidence. */
-export const verifierKeyHash = (key: Uint8Array): string => sha256Hex(key);

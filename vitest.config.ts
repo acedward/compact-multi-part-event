@@ -25,8 +25,6 @@ export default defineConfig({
   },
   test: {
     include: ["tests/**/*.test.ts"],
-    // Parked until the CLI is ported to the reader and publisher (plan P1-B).
-    exclude: ["tests/cli-commands.test.ts"],
     testTimeout: 120_000,
     hookTimeout: 120_000,
     fileParallelism: false,

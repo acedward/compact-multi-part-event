@@ -4,8 +4,8 @@
  * distinct roles, network-specific addresses), a public identity that contains no
  * secret material, and the fee margin of the wallet facade's configuration (default 5
  * blocks, 0..100, checked before the mnemonic is read, passed to `WalletFacade.init`).
- * Syncing and transacting need a live network. The `funding` command's output test
- * moved to tests/cli-commands.test.ts with the rest of the parked CLI (plan P1-B).
+ * Syncing and transacting need a live network. The `funding` command's output is
+ * tested in tests/deploy-tools-commands.test.ts.
  *
  * The mnemonic used here is the public all-"abandon" test phrase that SDK test kits
  * ship; it holds no funds and is never used against a network.

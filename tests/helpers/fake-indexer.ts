@@ -46,6 +46,10 @@ export class FakeIndexer {
   requests = 0;
   lookups = 0;
   readonly queries: string[] = [];
+  /** Event ids `contractEvents` leaves out (simulates an incomplete fetch). */
+  readonly hiddenEvents = new Set<number>();
+  /** The ledger state after each indexed block, by block hash. */
+  readonly snapshots = new Map<string, ledger.LedgerState>();
 
   constructor(
     readonly chain: LocalChain,
@@ -65,6 +69,7 @@ export class FakeIndexer {
     const blockHash = this.chain.parentBlockHash;
     const blockTimestampMs = this.chain.seconds * 1000;
     const result = this.chain.apply(overrides.applied ?? tx);
+    this.snapshots.set(blockHash, this.chain.state);
     const fromEvents = result.events[0]?.source.transactionHash;
     let hash = overrides.hash ?? fromEvents;
     if (hash === undefined) {
@@ -136,6 +141,7 @@ export class FakeIndexer {
         const log = content as Extract<ledger.EventDetails, { tag: "contractLog" }>;
         if (log.address !== address || log.loggedItem.eventType !== "misc") continue;
         if (txHash !== undefined && entry.hash !== txHash) continue;
+        if (this.hiddenEvents.has(id)) continue;
         const value = decodeMiscValue(log.loggedItem.data);
         const name =
           this.options.corruptTypedName === true ? "00".repeat(32) : toHex(value.slice(0, 32));
@@ -188,15 +194,22 @@ export class FakeIndexer {
       };
     }
     if (query.includes("contract(address")) {
-      const state = this.chain.state.index(vars.address as string);
-      const knownBlock = vars.hash === this.chain.parentBlockHash;
+      // The latest block, or an indexed block: the state after that block.
+      const latest = vars.hash === this.chain.parentBlockHash;
+      const ledgerState = latest ? this.chain.state : this.snapshots.get(vars.hash as string);
+      const state = ledgerState?.index(vars.address as string);
+      const entry = this.entries.find((item) => item.blockHash === vars.hash);
+      const block = latest
+        ? this.latestBlock()
+        : entry === undefined
+          ? null
+          : this.block(entry.blockHeight, entry.blockHash, entry.blockTimestampMs);
       return {
         status: 200,
         json: {
           data: {
-            contract:
-              state === undefined || !knownBlock ? null : { state: toHex(state.serialize()) },
-            block: knownBlock ? this.latestBlock() : null,
+            contract: state === undefined ? null : { state: toHex(state.serialize()) },
+            block,
           },
         },
       };

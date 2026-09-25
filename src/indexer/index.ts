@@ -29,7 +29,7 @@ import type {
   PinnedBlock,
   PublicationStateSource,
 } from "../publisher/compose.js";
-import { bytesEqual, bytesToHex, hexToBytes } from "../reader/bytes.js";
+import { bytesEqual, hexToBytes } from "../reader/bytes.js";
 import { eventValue, restoreIndexerMiscEvent } from "../reader/event.js";
 import type { PartEvent } from "../reader/packages.js";
 import { partEventsFromLedgerEvents } from "../reader/transaction.js";
@@ -585,6 +585,3 @@ export const rawTransactionInBlock = async (
   const index = extrinsics.findIndex((extrinsic) => extrinsic.toLowerCase().includes(needle));
   return index < 0 ? undefined : index;
 };
-
-/** Hex helper re-exported for callers that record evidence. */
-export const hexOf = bytesToHex;

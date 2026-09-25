@@ -1,16 +1,14 @@
-#!/usr/bin/env node
 /**
- * `cmse`: deploy the reference emitter or the consumer example, register and publish
- * messages, check a wallet's funding, and verify publications without a wallet.
+ * deploy-tools: deploy and exercise this repository's examples on a live network.
+ * Not part of the library; run from a clone as `npm run deploy-tools -- <command> …`.
  *
- * Configuration comes from flags or `CMSE_*` environment variables (see
- * `.env.example`). Secrets are only ever passed as file PATHS; no command prints one.
+ * Configuration comes from flags or `CMSE_*` environment variables (`--help` lists
+ * them). Secrets are only ever passed as file PATHS; no command prints one.
  *
  * @module
  */
-import { existsSync, readFileSync, realpathSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
-import { pathToFileURL } from "node:url";
 
 import {
   type IndexedTransaction,
@@ -19,79 +17,92 @@ import {
   ledgerParametersFromHex,
   PublicDataError,
   waitForTransaction,
-} from "../adapters/indexer.js";
-import { proofServerProver, proverFromEndpoint } from "../adapters/prover.js";
-import { SecretFileError } from "../adapters/secrets.js";
+} from "../src/indexer/index.js";
 import {
-  DEFAULT_FEE_BLOCKS_MARGIN,
-  MAX_FEE_BLOCKS_MARGIN,
-  WalletSession,
-  type WalletSessionOptions,
-} from "../adapters/wallet.js";
-import { WalletCacheError } from "../adapters/wallet-cache.js";
-import { WalletNotSyncedError } from "../adapters/wallet-sync.js";
-import { checkArtifactHashes, zkConfigForContract } from "../adapters/zk-config.js";
-import { hexToBytes } from "../codec/bytes.js";
-import { FORMAT_MAX_PARTS } from "../codec/constants.js";
+  consoleIo,
+  exitAfterFlush,
+  hex32,
+  invokedDirectly,
+  type Io,
+  jsonSafe,
+  Options,
+  parseArgs,
+  UsageError,
+} from "../src/cli/options.js";
 import {
   DEFAULT_MAX_PARTS,
+  DEFAULT_MAX_TTL_SECONDS,
   DEFAULT_TTL_SECONDS,
-  PublicationCheckError,
+  MAX_PARTS_CEILING,
+  PackageCheckError,
   type PublicationBalancer,
+  type PublicationProver,
   type PublicationSubmitter,
-} from "../transaction/index.js";
+} from "../src/publisher/index.js";
+import { hexToBytes } from "../src/reader/bytes.js";
 import {
   type ChainServices,
   CommandFailure,
   type FundingWallet,
   type IncludedTransaction,
-  jsonSafe,
   runDeploy,
   runFunding,
+  runPin,
   runPublish,
-  runRegister,
 } from "./commands.js";
-import {
-  type Endpoints,
-  Options,
-  parseArgs,
-  resolveEndpoints,
-  resolveProofServer,
-  UsageError,
-} from "./config.js";
+import { ENV_FOR_FLAG, type Endpoints, resolveEndpoints, resolveProofServer } from "./config.js";
 import {
   committedVerifierKeys,
-  contractProfiles,
-  type ContractProfile,
+  type ExampleProfile,
   loadGeneratedModule,
-  provableCircuits,
+  profileOf,
 } from "./contracts.js";
-import { LEVEL_MEANING, verifyExitStatus, verifyPublication } from "./verify.js";
+import { proofServerProver, proverFromEndpoint } from "./prover.js";
+import { SecretFileError } from "./secrets.js";
+import {
+  DEFAULT_FEE_BLOCKS_MARGIN,
+  MAX_FEE_BLOCKS_MARGIN,
+  WalletSession,
+  type WalletSessionOptions,
+} from "./wallet.js";
+import { WalletCacheError } from "./wallet-cache.js";
+import { WalletNotSyncedError } from "./wallet-sync.js";
+import { checkArtifactHashes, zkConfigForContract } from "./zk-config.js";
 
-export const USAGE = `cmse — multi-segment event emission: deploy, register, publish, verify
+export const USAGE = `deploy-tools — deploy and exercise this repository's examples on a live network
+(not part of the library; run from a clone after npm ci, npm run compile and, for
+publish and pin, npm run compile:zk)
 
-  cmse funding  [--register-dust estimate|register]
-  cmse deploy   --emitter-secret-file <new path> --maintenance-key-file <new path> [--out <record.json>]
-  cmse deploy-consumer --maintenance-key-file <new path> [--out <record.json>]
-  cmse register --contract <consumer address> (--message-file <path> | --message-hex <hex>)
-                --owner-secret-file <path> [--new-owner-secret] [--out <record.json>]
-  cmse publish  --contract <address> (--message-file <path> | --message-hex <hex>)
-                [--kind emitter|consumer] (--emitter-secret-file | --owner-secret-file) <path>
-                [--max-parts <n>] [--max-block-fraction <f>] [--record-out <record.json>] [--dry-run]
-  cmse verify   --contract <address> --tx <transaction hash> [--level 1|2|3] [--kind emitter|consumer]
-                [--request-id <hex>] [--verifier-key <file>] [--node <rpc url>] [--json]
-  cmse verify   --contract <address> --raw-file <hex file> --status SUCCESS [--state-file <hex file>] ...
+  npm run deploy-tools -- funding [--register-dust estimate|register]
+  npm run deploy-tools -- deploy  --example emitter|notice-board --out <new record.json>
+                                  --emitter-secret-file <new path> --maintenance-key-file <new path>
+                                  [--reuse-secret] [--reuse-maintenance-key]
+  npm run deploy-tools -- publish --example emitter|notice-board --contract <address>
+                                  (--message <text> | --message-hex <hex> | --message-file <path>)...
+                                  --emitter-secret-file <path> --out <new record.json>
+                                  [--max-parts <n>] [--max-block-fraction <f>] [--dry-run]
+  npm run deploy-tools -- pin     --example notice-board --contract <address> --digest <64 hex>
+                                  --emitter-secret-file <path> --out <new record.json>
+
+publish: every message is one package (256-byte parts, the last zero-padded) in an intent
+of its own; several messages go into ONE transaction, one intent each. --message is text
+in the example's format (emitter: UTF-8; notice-board: 4-byte big-endian length, then
+UTF-8); --message-hex and --message-file are the payload bytes. The record (finalized
+public bytes, identifiers, each package's segment and intent hash) is written before the
+one submission; after inclusion every package is verified from the raw bytes.
+Default part cap ${String(DEFAULT_MAX_PARTS)} (--max-parts up to ${String(MAX_PARTS_CEILING)}; the block limits decide the real maximum).
 
 Network (flag or environment variable; defaults are stagenet's public endpoints):
   --network CMSE_NETWORK (stagenet)   --indexer CMSE_INDEXER_URL   --indexer-ws CMSE_INDEXER_WS_URL
   --node CMSE_NODE_URL                --proof-server CMSE_PROOF_SERVER_URL (loopback only, unless
   --allow-remote-prover)              --proof-concurrency CMSE_PROOF_CONCURRENCY (4)
-  --zk-dir CMSE_ZK_DIR (build/zk/<contract>, from npm run compile:zk)
+  --zk-dir CMSE_ZK_DIR (build/zk/<example>, from npm run compile:zk)
+  --ttl-seconds (${String(DEFAULT_TTL_SECONDS)}, at most ${String(DEFAULT_MAX_TTL_SECONDS)})   --proof-timeout-seconds (900)
 Secrets (paths only; files are mode 0600, outside every Git working tree):
   --wallet-mnemonic-file CMSE_WALLET_MNEMONIC_FILE   --emitter-secret-file CMSE_EMITTER_SECRET_FILE
-  --owner-secret-file CMSE_OWNER_SECRET_FILE         --maintenance-key-file CMSE_MAINTENANCE_KEY_FILE
-Wallet sync (every command that opens a wallet waits for a COMPLETE sync of the shielded,
-unshielded and DUST wallets; a first sync downloads every ledger event and can take long):
+  --maintenance-key-file CMSE_MAINTENANCE_KEY_FILE
+Wallet sync (every command waits for a COMPLETE sync of the shielded, unshielded and DUST
+wallets; a first sync downloads every ledger event and can take long):
   --sync-timeout-minutes CMSE_SYNC_TIMEOUT_MINUTES (60)   progress is printed every 30 s;
   --wallet-cache-file CMSE_WALLET_CACHE_FILE (optional; mode 0600, outside every Git working tree)
       saves the synced wallet state and restores it on the next run. It holds private wallet
@@ -103,67 +114,53 @@ Wallet fees: --fee-blocks-margin CMSE_FEE_BLOCKS_MARGIN (5; an integer from 0 to
   the fee prices rose for this many blocks (up to about 4.6% per block on stagenet: 5
   blocks ≈ ×1.25 the required fee, 100 blocks ≈ ×89). Too small a margin can get a
   transaction refused when prices rise before it is included.
+Output: --json prints the public record as JSON on stdout (progress goes to stderr).
 
-verify levels: 1 the message (complete canonical group, exact names, SHA-256); 2 the placement
-(guaranteed-only emission calls in one included transaction, from the raw bytes; with --node the
-bytes are also found in the node's block); 3 the code (deployed verifier key equals the repository's).
-Exit status: 0 success/verified; 1 a check or transaction failed; 2 usage or input error;
-3 not found (not indexed yet, or wrong hash/address).
+Exit status: 0 success; 1 a check or transaction failed (or the wallet is not synced);
+2 usage or input error; 3 not found.
 `;
 
-const VALUED = new Set([
-  "network",
-  "indexer",
-  "indexer-ws",
-  "node",
-  "proof-server",
-  "proof-concurrency",
-  "wallet-mnemonic-file",
-  "wallet-cache-file",
-  "sync-timeout-minutes",
-  "fee-blocks-margin",
-  "emitter-secret-file",
-  "owner-secret-file",
-  "maintenance-key-file",
-  "zk-dir",
-  "register-dust",
-  "out",
-  "record-out",
-  "contract",
-  "message-file",
-  "message-hex",
-  "kind",
-  "max-parts",
-  "max-block-fraction",
-  "ttl-seconds",
-  "tx",
-  "level",
-  "request-id",
-  "verifier-key",
-  "entry-point",
-  "raw-file",
-  "status",
-  "state-file",
-  "proof-timeout-seconds",
-]);
-const SWITCHES = new Set([
-  "json",
-  "help",
-  "allow-remote-prover",
-  "reuse-secret",
-  "reuse-maintenance-key",
-  "new-owner-secret",
-  "dry-run",
-]);
+const FLAGS = {
+  valued: new Set([
+    "network",
+    "indexer",
+    "indexer-ws",
+    "node",
+    "proof-server",
+    "proof-concurrency",
+    "wallet-mnemonic-file",
+    "wallet-cache-file",
+    "sync-timeout-minutes",
+    "fee-blocks-margin",
+    "emitter-secret-file",
+    "maintenance-key-file",
+    "zk-dir",
+    "register-dust",
+    "example",
+    "out",
+    "contract",
+    "message",
+    "message-hex",
+    "message-file",
+    "digest",
+    "max-parts",
+    "max-block-fraction",
+    "ttl-seconds",
+    "proof-timeout-seconds",
+  ]),
+  switches: new Set([
+    "json",
+    "help",
+    "allow-remote-prover",
+    "reuse-secret",
+    "reuse-maintenance-key",
+    "dry-run",
+  ]),
+  repeatable: new Set(["message", "message-hex", "message-file"]),
+};
 
-/** Output streams (injectable for tests). */
-export interface Io {
-  readonly out: (line: string) => void;
-  readonly err: (line: string) => void;
-}
-
-/** What the CLI needs from a wallet ({@link WalletSession} provides it). */
-export interface CliWallet extends FundingWallet {
+/** What deploy-tools needs from a wallet ({@link WalletSession} provides it). */
+export interface ToolWallet extends FundingWallet {
   /** Resolves after a complete sync; throws `WalletNotSyncedError` otherwise. */
   synced(): Promise<unknown>;
   balancer(): PublicationBalancer;
@@ -173,9 +170,13 @@ export interface CliWallet extends FundingWallet {
 }
 
 /** Replaceable services of {@link main} (tests use stand-ins). */
-export interface CliDependencies {
+export interface ToolDependencies {
   /** Opens the wallet (default {@link WalletSession.open}). */
-  readonly openWallet?: (options: WalletSessionOptions) => Promise<CliWallet>;
+  readonly openWallet?: (options: WalletSessionOptions) => Promise<ToolWallet>;
+  /** Proves transactions (default: the proof server, over the example's full key build). */
+  readonly prover?: PublicationProver;
+  /** Require proven, bound final bytes (default true; offline tests set false). */
+  readonly requireProofs?: boolean;
 }
 
 /** Open the wallet with the command line's sync, cache and fee-margin settings. */
@@ -185,8 +186,8 @@ const openWallet = async (
   proofServerUrl: string,
   dustParameters: WalletSessionOptions["dustParameters"],
   log: (line: string) => void,
-  dependencies: CliDependencies,
-): Promise<CliWallet> => {
+  dependencies: ToolDependencies,
+): Promise<ToolWallet> => {
   const stateCacheFile = options.string("wallet-cache-file");
   const open = dependencies.openWallet ?? ((settings) => WalletSession.open(settings));
   return await open({
@@ -211,46 +212,6 @@ const openWallet = async (
   });
 };
 
-const address = (options: Options): string => {
-  const value = options
-    .required("contract", "a contract address")
-    .replace(/^0x/iu, "")
-    .toLowerCase();
-  if (!/^[0-9a-f]{64}$/u.test(value)) throw new UsageError("--contract must be 64 hex characters");
-  return value;
-};
-
-const profileOf = (options: Options): ContractProfile => {
-  const kind = options.string("kind") ?? "emitter";
-  if (kind !== "emitter" && kind !== "consumer")
-    throw new UsageError("--kind is emitter or consumer");
-  return contractProfiles()[kind];
-};
-
-const readHexOrBytesFile = (path: string): Uint8Array => {
-  if (!existsSync(path)) throw new UsageError(`${path} does not exist`);
-  const raw = readFileSync(path);
-  const text = raw.toString("utf8").trim();
-  return /^[0-9a-fA-F]+$/u.test(text) && text.length % 2 === 0
-    ? hexToBytes(text.toLowerCase())
-    : new Uint8Array(raw);
-};
-
-const messageOf = (options: Options): Uint8Array => {
-  const file = options.string("message-file");
-  const hex = options.string("message-hex");
-  if ((file === undefined) === (hex === undefined)) {
-    throw new UsageError("pass exactly one of --message-file and --message-hex");
-  }
-  if (file !== undefined) {
-    if (!existsSync(file)) throw new UsageError(`${file} does not exist`);
-    return new Uint8Array(readFileSync(file));
-  }
-  const clean = (hex ?? "").replace(/^0x/iu, "").toLowerCase();
-  if (!/^([0-9a-f]{2})*$/u.test(clean)) throw new UsageError("--message-hex must be hex");
-  return hexToBytes(clean);
-};
-
 const toIncluded = (tx: IndexedTransaction): IncludedTransaction => ({
   hash: tx.hash,
   rawHex: tx.rawHex,
@@ -267,6 +228,21 @@ const noCallsEndpoint = {
   lookupKey: () => Promise.resolve(undefined),
 };
 
+/** One message payload per `--message`, `--message-hex` or `--message-file`, in order. */
+const messagesOf = (options: Options, profile: ExampleProfile): Uint8Array[] =>
+  options.parsed.sequence.map(({ name, value }) => {
+    if (name === "message") return profile.encodeText(value);
+    if (name === "message-hex") {
+      const clean = value.replace(/^0x/iu, "").toLowerCase();
+      if (!/^([0-9a-f]{2})+$/u.test(clean)) {
+        throw new UsageError("--message-hex must be non-empty hex");
+      }
+      return hexToBytes(clean);
+    }
+    if (!existsSync(value)) throw new UsageError(`--message-file ${value} does not exist`);
+    return new Uint8Array(readFileSync(value));
+  });
+
 interface OpenedServices {
   readonly services: ChainServices;
   close(): Promise<void>;
@@ -274,24 +250,19 @@ interface OpenedServices {
 
 const openChainServices = async (
   options: Options,
-  profile: ContractProfile,
+  profile: ExampleProfile,
   proves: boolean,
   log: (line: string) => void,
-  dependencies: CliDependencies,
+  dependencies: ToolDependencies,
 ): Promise<OpenedServices> => {
   const endpoints = resolveEndpoints(options);
   const proofServer = resolveProofServer(options);
   const indexer = new IndexerClient({ url: endpoints.indexer });
-  const latest = await indexer.latestBlock();
-  if (latest.ledgerParametersHex === undefined) {
-    throw new PublicDataError("shape", "the indexer did not return ledger parameters");
-  }
-  const parameters = ledgerParametersFromHex(latest.ledgerParametersHex);
-  let prover = proverFromEndpoint(noCallsEndpoint);
-  if (proves) {
+  let prover = dependencies.prover ?? proverFromEndpoint(noCallsEndpoint);
+  if (proves && dependencies.prover === undefined) {
     const zkDir = options.string("zk-dir") ?? profile.zkDir;
     const sums = join(profile.keysDir, "SHA256SUMS");
-    if (existsSync(sums)) checkArtifactHashes(zkDir, sums);
+    if (existsSync(sums) && existsSync(join(zkDir, "keys"))) checkArtifactHashes(zkDir, sums);
     prover = proofServerProver({
       url: proofServer,
       zkConfig: zkConfigForContract({
@@ -306,6 +277,11 @@ const openChainServices = async (
       },
     });
   }
+  const latest = await indexer.latestBlock();
+  if (latest.ledgerParametersHex === undefined) {
+    throw new PublicDataError("shape", "the indexer did not return ledger parameters");
+  }
+  const parameters = ledgerParametersFromHex(latest.ledgerParametersHex);
   log(`opening wallet     (syncing with ${endpoints.indexer})`);
   const wallet = await openWallet(
     options,
@@ -321,10 +297,9 @@ const openChainServices = async (
     await wallet.close();
     throw error;
   }
-  const source = indexerStateSource(indexer);
   const services: ChainServices = {
     network: endpoints.network,
-    stateSource: source,
+    stateSource: indexerStateSource(indexer),
     currentParameters: async () => {
       const block = await indexer.latestBlock();
       if (block.ledgerParametersHex === undefined) {
@@ -352,153 +327,108 @@ const openChainServices = async (
       return state === undefined ? undefined : hexToBytes(state.stateHex);
     },
     proofTimeoutMs: options.integer("proof-timeout-seconds", 900) * 1000,
-    requireProofs: true,
+    requireProofs: dependencies.requireProofs ?? true,
     log,
   };
   return { services, close: () => wallet.close() };
 };
 
-const runVerify = async (options: Options, io: Io, json: boolean): Promise<number> => {
-  const profile = profileOf(options);
-  const entryPoint = options.string("entry-point") ?? "emitPart";
-  const level = options.integer("level", 3, 3);
-  const keyPath = options.string("verifier-key") ?? join(profile.keysDir, `${entryPoint}.verifier`);
-  const rawFile = options.string("raw-file");
-  const common = {
-    network: options.string("network") ?? "stagenet",
-    contract: address(options),
-    entryPoint,
-    level,
-    ...(options.string("request-id") === undefined
-      ? {}
-      : { requestId: (options.string("request-id") ?? "").replace(/^0x/iu, "").toLowerCase() }),
-    ...(level >= 3 && existsSync(keyPath)
-      ? { expectedVerifierKey: new Uint8Array(readFileSync(keyPath)) }
-      : {}),
-  };
-  if (level >= 3 && common.expectedVerifierKey === undefined) {
-    throw new UsageError(`Level 3 needs the expected verifier key; ${keyPath} does not exist`);
-  }
-  let report;
-  if (rawFile !== undefined) {
-    const stateFile = options.string("state-file");
-    report = await verifyPublication({
-      ...common,
-      rawTransaction: readHexOrBytesFile(rawFile),
-      status: options.required("status", "the inclusion status (SUCCESS or PARTIAL_SUCCESS)"),
-      ...(options.string("tx") === undefined
-        ? {}
-        : { transactionHash: options.string("tx") ?? "" }),
-      ...(stateFile === undefined ? {} : { contractStateBytes: readHexOrBytesFile(stateFile) }),
-    });
-  } else {
-    const endpoints = resolveEndpoints(options, { node: false });
-    const node = options.flags.get("node");
-    report = await verifyPublication({
-      ...common,
-      network: endpoints.network,
-      indexer: new IndexerClient({ url: endpoints.indexer }),
-      transactionHash: options
-        .required("tx", "a transaction hash")
-        .replace(/^0x/iu, "")
-        .toLowerCase(),
-      ...(typeof node === "string" ? { nodeUrl: node } : {}),
-    });
-  }
-  const print = json ? io.err : io.out;
-  if (report.transaction !== undefined) {
-    print(
-      `transaction ${report.transaction.hash}${report.transaction.blockHeight === undefined ? "" : ` at block ${String(report.transaction.blockHeight)}`}${report.transaction.status === undefined ? "" : `, status ${report.transaction.status}`}`,
-    );
-  }
-  for (const key of ["level1", "level2", "level3"]) {
-    for (const line of report.levels[key]?.lines ?? []) print(line);
-  }
-  if (report.notFound) print("not found: the transaction or its events are not indexed (yet)");
-  print(`verified up to level ${String(report.level)} — ${LEVEL_MEANING[report.level] ?? ""}`);
-  if (json) io.out(JSON.stringify(jsonSafe(report), null, 2));
-  return verifyExitStatus(report);
-};
-
 const runChainCommand = async (
-  command: string,
+  command: "deploy" | "publish" | "pin",
   options: Options,
   io: Io,
   json: boolean,
-  dependencies: CliDependencies,
+  dependencies: ToolDependencies,
 ): Promise<number> => {
   const log = json ? io.err : io.out;
-  const profile =
-    command === "deploy"
-      ? contractProfiles().emitter
-      : command === "deploy-consumer" || command === "register"
-        ? contractProfiles().consumer
-        : profileOf(options);
-  const generated = await loadGeneratedModule(profile);
-  const proves = command === "register" || command === "publish";
-  const opened = await openChainServices(options, profile, proves, log, dependencies);
-  try {
-    let result: unknown;
-    const ttlSeconds = options.integer("ttl-seconds", DEFAULT_TTL_SECONDS, 3600);
-    if (command === "deploy" || command === "deploy-consumer") {
-      const out = options.string("out");
-      result = await runDeploy(opened.services, {
+  const profile = profileOf(options.string("example"));
+  const out = options.required("out", "a path for the public record");
+  const ttlSeconds = options.integer("ttl-seconds", DEFAULT_TTL_SECONDS, DEFAULT_MAX_TTL_SECONDS);
+  // Validate every flag before a wallet is opened.
+  if (command !== "publish") {
+    for (const flag of [
+      "message",
+      "message-hex",
+      "message-file",
+      "max-parts",
+      "max-block-fraction",
+      "dry-run",
+    ]) {
+      if (options.parsed.flags.has(flag)) throw new UsageError(`--${flag} is for publish`);
+    }
+  }
+  let run: (services: ChainServices) => Promise<unknown>;
+  if (command === "deploy") {
+    const emitterSecretFile = options.required(
+      "emitter-secret-file",
+      "a path for the new emitter secret",
+    );
+    const maintenanceKeyFile = options.required(
+      "maintenance-key-file",
+      "a path for the new maintenance signing key",
+    );
+    const generated = await loadGeneratedModule(profile);
+    const verifierKeys = committedVerifierKeys(profile);
+    run = (services) =>
+      runDeploy(services, {
         profile,
         generated,
-        verifierKeys: committedVerifierKeys(profile),
-        ...(command === "deploy"
-          ? {
-              emitterSecretFile: options.required(
-                "emitter-secret-file",
-                "a path for the new emitter secret",
-              ),
-            }
-          : {}),
+        verifierKeys,
+        emitterSecretFile,
         reuseSecret: options.has("reuse-secret"),
-        maintenanceKeyFile: options.required(
-          "maintenance-key-file",
-          "a path for the new maintenance signing key",
-        ),
+        maintenanceKeyFile,
         reuseMaintenanceKey: options.has("reuse-maintenance-key"),
         ttlSeconds,
-        ...(out === undefined ? {} : { out }),
+        out,
       });
-    } else if (command === "register") {
-      const out = options.string("out");
-      result = await runRegister(opened.services, {
-        profile,
-        generated,
-        address: address(options),
-        message: messageOf(options),
-        ownerSecretFile: options.required("owner-secret-file", "the owner secret file"),
-        createOwnerSecret: options.has("new-owner-secret"),
-        ttlSeconds,
-        circuits: provableCircuits(profile),
-        ...(out === undefined ? {} : { out }),
-      });
-    } else {
-      const recordOut = options.string("record-out");
+  } else {
+    const address = hex32(options.required("contract", "the contract address"), "contract");
+    const secretFile = options.required("emitter-secret-file", "the emitter secret file");
+    const generated = await loadGeneratedModule(profile);
+    if (command === "publish") {
+      const messages = messagesOf(options, profile);
+      if (messages.length === 0) {
+        throw new UsageError("give at least one --message, --message-hex or --message-file");
+      }
+      const maxParts = options.integer("max-parts", DEFAULT_MAX_PARTS, MAX_PARTS_CEILING);
       const fraction = options.string("max-block-fraction");
       const maxBlockFraction = fraction === undefined ? 1 : Number(fraction);
       if (!(maxBlockFraction > 0 && maxBlockFraction <= 1)) {
         throw new UsageError("--max-block-fraction must be in (0, 1]");
       }
-      result = await runPublish(opened.services, {
-        profile,
-        generated,
-        address: address(options),
-        message: messageOf(options),
-        secretFile:
-          profile.access === "whitelist"
-            ? options.required("emitter-secret-file", "the emitter secret file")
-            : options.required("owner-secret-file", "the owner secret file"),
-        maxParts: options.integer("max-parts", DEFAULT_MAX_PARTS, FORMAT_MAX_PARTS),
-        ttlSeconds,
-        maxBlockFraction,
-        dryRun: options.has("dry-run"),
-        ...(recordOut === undefined ? {} : { recordOut }),
-      });
+      run = (services) =>
+        runPublish(services, {
+          profile,
+          generated,
+          address,
+          messages,
+          secretFile,
+          maxParts,
+          ttlSeconds,
+          maxBlockFraction,
+          out,
+          dryRun: options.has("dry-run"),
+        });
+    } else {
+      if (profile.name !== "notice-board") {
+        throw new UsageError("pin is the notice board's circuit: --example notice-board");
+      }
+      const digest = hexToBytes(hex32(options.required("digest", "the digest to pin"), "digest"));
+      run = (services) =>
+        runPin(services, {
+          profile,
+          generated,
+          address,
+          digest,
+          secretFile,
+          ttlSeconds,
+          out,
+        });
     }
+  }
+  const opened = await openChainServices(options, profile, command !== "deploy", log, dependencies);
+  try {
+    const result = await run(opened.services);
     if (json) io.out(JSON.stringify(jsonSafe(result), null, 2));
     return 0;
   } finally {
@@ -510,7 +440,7 @@ const runFundingCommand = async (
   options: Options,
   io: Io,
   json: boolean,
-  dependencies: CliDependencies,
+  dependencies: ToolDependencies,
 ): Promise<number> => {
   const log = json ? io.err : io.out;
   const mode = options.string("register-dust");
@@ -542,32 +472,32 @@ const runFundingCommand = async (
 };
 
 /**
- * Run the CLI. Returns the exit status: 0 success, 1 failure, 2 usage or input error,
- * 3 not found.
+ * Run deploy-tools. Returns the exit status: 0 success, 1 failure, 2 usage or input
+ * error, 3 not found.
  */
 export const main = async (
   argv: readonly string[],
   env: Readonly<Record<string, string | undefined>> = process.env,
-  io: Io = { out: (line) => console.log(line), err: (line) => console.error(line) },
-  dependencies: CliDependencies = {},
+  io: Io = consoleIo,
+  dependencies: ToolDependencies = {},
 ): Promise<number> => {
   try {
-    const parsed = parseArgs(argv, VALUED, SWITCHES);
-    const options = new Options(parsed.flags, env);
+    const parsed = parseArgs(argv, FLAGS);
+    const options = new Options(parsed, env, ENV_FOR_FLAG);
     const json = options.has("json");
-    if (options.has("help") || parsed.command === undefined || parsed.command === "help") {
+    if (options.has("help") || parsed.command === "help") {
       io.out(USAGE);
-      return parsed.command === undefined && !options.has("help") ? 2 : 0;
+      return 0;
     }
     switch (parsed.command) {
-      case "verify":
-        return await runVerify(options, io, json);
+      case undefined:
+        io.err(USAGE);
+        return 2;
       case "funding":
         return await runFundingCommand(options, io, json, dependencies);
       case "deploy":
-      case "deploy-consumer":
-      case "register":
       case "publish":
+      case "pin":
         return await runChainCommand(parsed.command, options, io, json, dependencies);
       default:
         throw new UsageError(`unknown command '${parsed.command}'`);
@@ -585,14 +515,14 @@ export const main = async (
       error instanceof RangeError
     ) {
       io.err(`error: ${message}`);
-      if (error instanceof UsageError) io.err("run `cmse --help` for usage");
+      if (error instanceof UsageError) io.err("run `npm run deploy-tools -- --help` for usage");
       return 2;
     }
     if (error instanceof PublicDataError && error.kind === "not-found") {
       io.err(`not found: ${message}`);
       return 3;
     }
-    if (error instanceof CommandFailure || error instanceof PublicationCheckError) {
+    if (error instanceof CommandFailure || error instanceof PackageCheckError) {
       io.err(`failed: ${message}`);
       return 1;
     }
@@ -601,45 +531,7 @@ export const main = async (
   }
 };
 
-const invokedDirectly = (): boolean => {
-  const script = process.argv[1];
-  if (script === undefined) return false;
-  try {
-    return import.meta.url === pathToFileURL(realpathSync(script)).href;
-  } catch {
-    return false;
-  }
-};
-
-/** The part of a writable stream {@link exitAfterFlush} waits on. */
-export interface FlushableStream {
-  readonly writableLength: number;
-}
-
-/**
- * Exit with `status` once stdout and stderr have handed everything written to them to
- * the operating system (bounded by `timeoutMs`). Calling `process.exit()` right after a
- * large write to a pipe cuts the output: a `--json` record of a real transaction is
- * larger than a pipe's 64 KiB buffer.
- */
-export const exitAfterFlush = async (
-  status: number,
-  options: {
-    readonly streams?: readonly FlushableStream[];
-    readonly exit?: (code: number) => void;
-    readonly timeoutMs?: number;
-    readonly pollMs?: number;
-  } = {},
-): Promise<void> => {
-  const streams = options.streams ?? [process.stdout, process.stderr];
-  const deadline = Date.now() + (options.timeoutMs ?? 30_000);
-  while (streams.some((stream) => stream.writableLength > 0) && Date.now() < deadline) {
-    await new Promise((resolveWait) => setTimeout(resolveWait, options.pollMs ?? 10));
-  }
-  (options.exit ?? ((code: number) => process.exit(code)))(status);
-};
-
-if (invokedDirectly()) {
+if (invokedDirectly(import.meta.url)) {
   // Exit explicitly (a wallet's indexer subscriptions can keep the event loop alive), but
   // only after the output is flushed.
   await exitAfterFlush(await main(process.argv.slice(2)));

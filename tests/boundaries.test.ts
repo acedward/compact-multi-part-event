@@ -4,8 +4,10 @@
  *   network, prover or generated contract code);
  * - the publisher reaches only the ledger, the runtime, Node built-ins, the reader and
  *   its own modules;
- * - no library module (`src/reader`, `src/publisher`, `src/indexer`) reaches tests,
- *   examples, deploy-tools, generated output or a test runner;
+ * - the `cmse` command line reaches only the reader, the indexer client, the ledger
+ *   package and Node built-ins (no runtime, wallet, prover or publisher code);
+ * - no library module (`src/reader`, `src/publisher`, `src/indexer`, `src/cli`) reaches
+ *   tests, examples, deploy-tools, generated output or a test runner;
  * - the notice-board example imports only the library's public entry points, the
  *   runtime and ledger packages, Node built-ins, its own files and its own binding.
  */
@@ -17,11 +19,13 @@ import { describe, expect, it } from "vitest";
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 
-const importsOf = (file: string): string[] => {
+/** Import specifiers of a file; with `runtimeOnly`, type-only imports are skipped. */
+const importsOf = (file: string, runtimeOnly = false): string[] => {
   const source = readFileSync(file, "utf8");
   const specifiers: string[] = [];
-  for (const match of source.matchAll(/(?:^|\n)\s*(?:import|export)[^;]*?from\s+"([^"]+)"/g)) {
-    if (match[1] !== undefined) specifiers.push(match[1]);
+  for (const match of source.matchAll(/(?:^|\n)\s*((?:import|export)[^;]*?)from\s+"([^"]+)"/g)) {
+    if (runtimeOnly && /^(?:import|export)\s+type\s/.test(match[1] ?? "")) continue;
+    if (match[2] !== undefined) specifiers.push(match[2]);
   }
   for (const match of source.matchAll(/import\(\s*"([^"]+)"\s*\)/g)) {
     if (match[1] !== undefined) specifiers.push(match[1]);
@@ -33,7 +37,10 @@ const resolveLocal = (from: string, specifier: string): string =>
   join(dirname(from), specifier).replace(/\.js$/, ".ts");
 
 /** Every file and bare/builtin specifier reachable from `entry`. */
-const reachable = (entry: string): { files: Set<string>; external: Set<string> } => {
+const reachable = (
+  entry: string,
+  runtimeOnly = false,
+): { files: Set<string>; external: Set<string> } => {
   const files = new Set<string>();
   const external = new Set<string>();
   const queue = [entry];
@@ -41,7 +48,7 @@ const reachable = (entry: string): { files: Set<string>; external: Set<string> }
     const file = queue.pop();
     if (file === undefined || files.has(file)) continue;
     files.add(file);
-    for (const specifier of importsOf(file)) {
+    for (const specifier of importsOf(file, runtimeOnly)) {
       if (specifier.startsWith(".")) queue.push(resolveLocal(file, specifier));
       else external.add(specifier);
     }
@@ -70,12 +77,30 @@ describe("dependency boundaries", () => {
     for (const file of rel(files)) expect(file).toMatch(/^src\/(publisher|reader)\//);
   });
 
+  it("the cmse command line needs only the reader, the indexer client, the ledger and built-ins", () => {
+    // At run time: the indexer client names the publisher's types, but only as types.
+    const { files, external } = reachable(join(root, "src/cli/main.ts"), true);
+    expect([...external].sort()).toEqual([
+      "@midnightntwrk/ledger-v9",
+      "node:crypto",
+      "node:fs",
+      "node:path",
+      "node:url",
+    ]);
+    for (const file of rel(files)) expect(file).toMatch(/^src\/(cli|reader|indexer)\//);
+  });
+
   it("no library module reaches tests, examples, deploy-tools, generated output or a test runner", () => {
-    for (const entry of ["src/reader/index.ts", "src/publisher/index.ts", "src/indexer/index.ts"]) {
+    for (const entry of [
+      "src/reader/index.ts",
+      "src/publisher/index.ts",
+      "src/indexer/index.ts",
+      "src/cli/main.ts",
+    ]) {
       const { files, external } = reachable(join(root, entry));
       for (const path of rel(files)) {
         expect(path.startsWith("src/"), `${path} (from ${entry})`).toBe(true);
-        expect(path).not.toMatch(/managed|tests\/|contract-examples\/|deploy-tools\/|src\/cli\//);
+        expect(path).not.toMatch(/managed|tests\/|contract-examples\/|deploy-tools\//);
       }
       for (const specifier of external) {
         expect(specifier).not.toMatch(/vitest|managed|wallet-sdk|midnight-js|bip39|rxjs/);

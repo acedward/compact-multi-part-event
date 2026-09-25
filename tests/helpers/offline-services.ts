@@ -1,12 +1,13 @@
 /**
- * Chain services for the CLI commands over the in-process ledger and the fake indexer:
- * stand-in prover (no proofs), stand-in wallet (binds, pays no fee), a submitter that
- * applies the submitted transaction (proofs erased) and indexes the submitted bytes.
+ * Chain services for deploy-tools' commands over the in-process ledger and the fake
+ * indexer: stand-in prover (no proofs), stand-in wallet (binds, pays no fee), a
+ * submitter that applies the submitted transaction (proofs erased) and indexes the
+ * submitted bytes. Secret files may live in temporary directories of the test runner.
  */
 import type * as ledger from "@midnightntwrk/ledger-v9";
 
-import type { ChainServices, IncludedTransaction } from "../../src/cli/commands.js";
-import type { PublicationBalancer, PublicationProver } from "../../src/transaction/index.js";
+import type { ChainServices, IncludedTransaction } from "../../deploy-tools/commands.js";
+import type { PublicationBalancer, PublicationProver } from "../../src/publisher/index.js";
 import { COIN_PUBLIC_KEY } from "./generated.js";
 import type { FakeIndexer } from "./fake-indexer.js";
 import { NETWORK } from "./ledger.js";

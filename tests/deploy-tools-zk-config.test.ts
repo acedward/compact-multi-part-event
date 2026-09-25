@@ -1,7 +1,8 @@
 /**
- * Zero-knowledge artifact adapter: SHA256SUMS parsing and checking, verifier-key
- * equality with both hashes in the message, and refusal of an artifact directory
- * without keys or with a key other than the expected one.
+ * Zero-knowledge artifact configuration of deploy-tools: SHA256SUMS parsing and
+ * checking, verifier-key equality (the CLI's comparison) with both hashes in the
+ * message, and refusal of an artifact directory without keys or with a key other than
+ * the expected one.
  */
 import { createHash } from "node:crypto";
 import { mkdirSync, mkdtempSync, writeFileSync } from "node:fs";
@@ -12,13 +13,20 @@ import { describe, expect, it } from "vitest";
 
 import {
   ArtifactMismatchError,
-  assertVerifierKeyEquals,
   checkArtifactHashes,
   parseSha256Sums,
   readVerifierKey,
   zkConfigForContract,
 } from "../deploy-tools/zk-config.js";
+import {
+  assertVerifierKeyEquals,
+  compareDeployedVerifierKey,
+  deployedVerifierKey,
+  VerifierKeyMismatchError,
+} from "../src/cli/verifier-key.js";
+import { filled32 } from "./helpers/bytes.js";
 import { EMITTER_VERIFIER_KEY, repoFile } from "./helpers/generated.js";
+import { deployEmitter, LocalChain } from "./helpers/ledger.js";
 
 const sha = (bytes: Uint8Array): string => createHash("sha256").update(bytes).digest("hex");
 
@@ -74,6 +82,29 @@ describe("verifier keys", () => {
     expect(() => assertVerifierKeyEquals(other, EMITTER_VERIFIER_KEY, "emitPart")).toThrow(
       new RegExp(`${sha(other)} differs from the expected ${sha(EMITTER_VERIFIER_KEY)}`),
     );
+    expect(() => assertVerifierKeyEquals(other, EMITTER_VERIFIER_KEY, "emitPart")).toThrow(
+      VerifierKeyMismatchError,
+    );
+  });
+
+  it("reads the deployed key from a contract state and compares it (verification Level 3)", async () => {
+    const chain = new LocalChain();
+    const address = await deployEmitter(chain, filled32(3));
+    const state = chain.state.index(address)?.serialize() ?? new Uint8Array();
+    expect(deployedVerifierKey(state, "emitPart")).toEqual(EMITTER_VERIFIER_KEY);
+    expect(deployedVerifierKey(state, "missing")).toBeUndefined();
+    expect(compareDeployedVerifierKey(state, "emitPart", EMITTER_VERIFIER_KEY)).toEqual({
+      ok: true,
+      deployedSha256: sha(EMITTER_VERIFIER_KEY),
+      expectedSha256: sha(EMITTER_VERIFIER_KEY),
+    });
+    const other = new Uint8Array(EMITTER_VERIFIER_KEY);
+    other[7] = (other[7] ?? 0) ^ 1;
+    expect(compareDeployedVerifierKey(state, "emitPart", other).ok).toBe(false);
+    expect(compareDeployedVerifierKey(state, "missing", other)).toEqual({
+      ok: false,
+      expectedSha256: sha(other),
+    });
   });
 
   it("builds a zk-config provider only over a directory with the expected keys", () => {

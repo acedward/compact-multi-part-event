@@ -24,15 +24,5 @@
     }
   },
   "include": ["src", "tests", "contract-examples", "deploy-tools", "vitest.config.ts"],
-  "exclude": [
-    "contract-examples/*/dist",
-    "contract-examples/*/node_modules",
-    "src/cli",
-    "deploy-tools/commands.ts",
-    "deploy-tools/config.ts",
-    "deploy-tools/contracts.ts",
-    "deploy-tools/main.ts",
-    "tests/cli-commands.test.ts",
-    "tests/helpers/offline-services.ts"
-  ]
+  "exclude": ["contract-examples/*/dist", "contract-examples/*/node_modules"]
 }

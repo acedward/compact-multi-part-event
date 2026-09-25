@@ -1,64 +1,67 @@
 /**
- * The CLI's chain commands, written against injected services so the same code runs
- * against stagenet (indexer, proof server, wallet) and against an in-process ledger in
- * tests. Every command persists public records BEFORE it submits, tracks inclusion by
- * transaction identifiers, and never prints or records a secret.
+ * deploy-tools' chain commands, written against injected services so the same code runs
+ * against a live network (indexer, proof server, wallet) and against an in-process
+ * ledger in tests. Every command writes its public record BEFORE it submits, submits
+ * the recorded bytes once, tracks inclusion by transaction identifiers, and never
+ * prints or records a secret.
+ *
+ * `publish` uses the library's publisher exactly as an adopter would: split each
+ * message into 256-byte parts, one intent per message (several messages: one
+ * transaction, one intent each), prove, balance, record, submit once, locate the
+ * packages after inclusion and verify them from the raw bytes.
  *
  * @module
  */
-import { renameSync, writeFileSync } from "node:fs";
-import { createHash } from "node:crypto";
+import { existsSync, renameSync, writeFileSync } from "node:fs";
 
 import {
+  type CircuitResults,
   ContractState as RuntimeContractState,
   createConstructorContext,
 } from "@midnight-ntwrk/compact-runtime";
 import * as ledger from "@midnightntwrk/ledger-v9";
 
 import {
-  createWitnessSecretFile,
-  readSigningKeyFile,
-  readWitnessSecret,
-  writeSigningKeyFile,
-} from "../adapters/secrets.js";
-import type {
-  DustRegistrationReport,
-  PublicWalletIdentity,
-  WalletBalances,
-} from "../adapters/wallet.js";
-import { WalletNotSyncedError } from "../adapters/wallet-sync.js";
-import { bytesEqual, bytesToHex, hexToBytes } from "../codec/bytes.js";
-import { deserializeTransaction, verifyPublicationTransaction } from "../codec/raw-transaction.js";
-import { encodePublication } from "../codec/writer.js";
-import {
   emitterAuthorityOf,
+  type EmitterPrivateState,
   emitterWitnesses,
-  messageOwnerOf,
-  messageOwnerWitnesses,
-} from "../contract/index.js";
+} from "../contract-examples/whitelist/whitelist.js";
+import { jsonSafe } from "../src/cli/options.js";
+import { verifierKeySha256 } from "../src/cli/verifier-key.js";
 import {
   bindingFromContract,
   blockFullnessCheck,
-  buildCircuitCallTransaction,
-  buildDeployTransaction,
-  buildPublicationTransaction,
-  callIntentCheck,
-  deployIntentCheck,
+  buildPackagesTransaction,
+  deserializeFinal,
   type EmitPartCircuit,
-  finalizePublication,
-  type FinalizedPublication,
   finalizeTransaction,
+  type FinalizedRecord,
   type FinalizedTransactionRecord,
-  locatePublication,
+  finalizeTransactionPackages,
+  locateRecord,
+  type PackageRequest,
   type PinnedBlock,
   type PublicationBalancer,
   type PublicationProver,
   type PublicationStateSource,
   type PublicationSubmitter,
-  submitPublication,
+  splitPayload,
+  submitRecord,
   submitSavedTransaction,
-} from "../transaction/index.js";
-import type { ContractProfile, GeneratedModule } from "./contracts.js";
+} from "../src/publisher/index.js";
+import { bytesEqual, bytesToHex, hexToBytes } from "../src/reader/bytes.js";
+import { deserializeTransaction, verifyTransactionPackages } from "../src/reader/transaction.js";
+import { buildCircuitCallTransaction, callIntentCheck } from "./call.js";
+import type { ExampleProfile, GeneratedModule } from "./contracts.js";
+import { buildDeployTransaction, deployIntentCheck } from "./deploy.js";
+import {
+  createWitnessSecretFile,
+  readSigningKeyFile,
+  readWitnessSecret,
+  writeSigningKeyFile,
+} from "./secrets.js";
+import type { DustRegistrationReport, PublicWalletIdentity, WalletBalances } from "./wallet.js";
+import { WalletNotSyncedError } from "./wallet-sync.js";
 
 /** A transaction the chain included. */
 export interface IncludedTransaction {
@@ -106,28 +109,32 @@ export class CommandFailure extends Error {
   }
 }
 
-/** JSON-safe copy: bigints as decimal strings, bytes as hex. */
-export const jsonSafe = (value: unknown): unknown => {
-  if (typeof value === "bigint") return value.toString(10);
-  if (value instanceof Uint8Array) return bytesToHex(value);
-  if (Array.isArray(value)) return value.map(jsonSafe);
-  if (value !== null && typeof value === "object") {
-    return Object.fromEntries(Object.entries(value).map(([key, item]) => [key, jsonSafe(item)]));
-  }
-  return value;
-};
-
-/** Write a public JSON record atomically (temporary file, then rename). */
+/**
+ * Write a public JSON record atomically (temporary file, then rename).
+ */
 export const writeRecord = (path: string, record: unknown): void => {
   const temporary = `${path}.tmp-${String(process.pid)}`;
   writeFileSync(temporary, `${JSON.stringify(jsonSafe(record), null, 2)}\n`);
   renameSync(temporary, path);
 };
 
-const sha256 = (bytes: Uint8Array): string => createHash("sha256").update(bytes).digest("hex");
+/**
+ * Refuse a record path that already exists: a record is written before a submission
+ * and must never overwrite the record of an earlier run.
+ *
+ * @throws {CommandFailure} If the file exists.
+ */
+export const assertNewRecord = (path: string): void => {
+  if (existsSync(path)) {
+    throw new CommandFailure(`the record ${path} already exists; choose a new path`);
+  }
+};
 
 const inclusionTimeout = (ttl: Date): number =>
   Math.max(60_000, ttl.getTime() - Date.now() + 60_000);
+
+const secretOptions = (services: ChainServices) =>
+  services.allowSecretsInRepository === true ? { allowInsideRepository: true } : {};
 
 // ----------------------------------------------------------------------------------
 // funding
@@ -160,7 +167,7 @@ const whenSynced = async <T>(step: () => Promise<T>, log: (line: string) => void
     log(`not synced         ${error.detail}; ${error.reason}`);
     log("                   no balance is shown before the sync is complete; run it again");
     throw new CommandFailure(
-      "the wallet is not synced, so its balances are unknown (not zero); run `cmse funding` again, with --wallet-cache-file to resume",
+      "the wallet is not synced, so its balances are unknown (not zero); run `funding` again, with --wallet-cache-file to resume",
     );
   }
 };
@@ -206,104 +213,86 @@ export const runFunding = async (
 };
 
 // ----------------------------------------------------------------------------------
-// deploy / deploy-consumer
+// deploy
 // ----------------------------------------------------------------------------------
 
 /** Options of {@link runDeploy}. */
 export interface DeployOptions {
-  readonly profile: ContractProfile;
+  readonly profile: ExampleProfile;
   readonly generated: GeneratedModule;
   readonly verifierKeys: Readonly<Record<string, Uint8Array>>;
-  /** Whitelist contracts: where the emitter secret is created (or read with `reuseSecret`). */
-  readonly emitterSecretFile?: string;
+  /** Where the emitter secret is created (or read with `reuseSecret`). */
+  readonly emitterSecretFile: string;
   readonly reuseSecret?: boolean;
   /** Where the maintenance signing key is created (or read with `reuseMaintenanceKey`). */
   readonly maintenanceKeyFile: string;
   readonly reuseMaintenanceKey?: boolean;
   readonly ttlSeconds: number;
-  /** Public deployment record, rewritten at every stage. */
-  readonly out?: string;
+  /** Public deployment record, rewritten at every stage (must not exist yet). */
+  readonly out: string;
 }
 
 /** Public deployment record. */
 export interface DeploymentRecord {
   readonly kind: "deployment";
   readonly stage: "built" | "finalized" | "submitted" | "included" | "verified";
-  readonly contract: ContractProfile["name"];
-  readonly access: ContractProfile["access"];
+  readonly example: ExampleProfile["name"];
+  readonly eventName: string;
   readonly network: string;
   readonly address: string;
   readonly operations: readonly string[];
   readonly verifierKeySha256: Readonly<Record<string, string>>;
   readonly maintenanceVerifyingKey: ledger.SignatureVerifyingKey;
-  /** Whitelist only: the public authority commitment. */
-  readonly emitterAuthority?: string;
+  /** The public authority commitment of the example whitelist. */
+  readonly emitterAuthority: string;
   readonly finalized?: FinalizedTransactionRecord;
   readonly submittedId?: string;
   readonly inclusion?: IncludedTransaction;
 }
 
-const prepareMaintenanceKey = (options: DeployOptions, services: ChainServices) => {
-  if (options.reuseMaintenanceKey === true) return readSigningKeyFile(options.maintenanceKeyFile);
-  const key = ledger.sampleSigningKey();
-  writeSigningKeyFile(
-    options.maintenanceKeyFile,
-    key,
-    services.allowSecretsInRepository === true ? { allowInsideRepository: true } : {},
-  );
-  return readSigningKeyFile(options.maintenanceKeyFile);
-};
-
-const prepareEmitterSecret = (options: DeployOptions, services: ChainServices): Uint8Array => {
-  const path = options.emitterSecretFile;
-  if (path === undefined)
-    throw new CommandFailure("the whitelist emitter needs --emitter-secret-file");
-  if (options.reuseSecret !== true) {
-    createWitnessSecretFile(
-      path,
-      services.allowSecretsInRepository === true ? { allowInsideRepository: true } : {},
-    );
-  }
-  return readWitnessSecret(path);
-};
-
 /**
- * Deploy the reference emitter (whitelist: creates the emitter secret file, stores its
- * commitment) or the consumer (registry: no constructor arguments). Records the address
- * before submitting, waits for inclusion and checks the deployed state.
+ * Deploy an example: create the emitter secret file (the whitelist stores its
+ * commitment) and the maintenance signing key file, build an explicit `ContractDeploy`
+ * with the committed verifier keys, record the address before submission, submit once,
+ * wait for inclusion and check the deployed state (operations, verifier keys,
+ * maintenance authority, authority commitment).
  */
 export const runDeploy = async (
   services: ChainServices,
   options: DeployOptions,
 ): Promise<DeploymentRecord> => {
   const { profile } = options;
-  let authority: Uint8Array | undefined;
-  let args: unknown[] = [];
-  let privateState: object;
-  if (profile.access === "whitelist") {
-    const secret = prepareEmitterSecret(options, services);
-    try {
-      authority = emitterAuthorityOf(secret);
-      const onChainRule = options.generated.pureCircuits.emitterAuthorityOf?.(secret);
-      if (!(onChainRule instanceof Uint8Array) || !bytesEqual(onChainRule, authority)) {
-        throw new CommandFailure("the contract's emitterAuthorityOf disagrees with the client's");
-      }
-    } finally {
-      secret.fill(0);
-    }
-    args = [authority];
-    privateState = { emitterSecret: new Uint8Array(32) };
-  } else {
-    privateState = { messageOwnerSecret: new Uint8Array(32) };
+  assertNewRecord(options.out);
+  if (options.reuseSecret !== true) {
+    createWitnessSecretFile(options.emitterSecretFile, secretOptions(services));
   }
-  const signingKey = prepareMaintenanceKey(options, services);
+  const secret = readWitnessSecret(options.emitterSecretFile);
+  let authority: Uint8Array;
+  try {
+    authority = emitterAuthorityOf(secret);
+    const onChainRule = options.generated.pureCircuits.emitterAuthorityOf?.(secret);
+    if (!(onChainRule instanceof Uint8Array) || !bytesEqual(onChainRule, authority)) {
+      throw new CommandFailure("the contract's emitterAuthorityOf disagrees with the client's");
+    }
+  } finally {
+    secret.fill(0);
+  }
+  if (options.reuseMaintenanceKey !== true) {
+    writeSigningKeyFile(
+      options.maintenanceKeyFile,
+      ledger.sampleSigningKey(),
+      secretOptions(services),
+    );
+  }
+  const signingKey = readSigningKeyFile(options.maintenanceKeyFile);
   const maintenanceVerifyingKey = ledger.signatureVerifyingKey(signingKey as ledger.SigningKey);
-  const contract = new options.generated.Contract(
-    profile.access === "whitelist" ? emitterWitnesses : messageOwnerWitnesses,
-  );
+  const contract = new options.generated.Contract(emitterWitnesses);
   const constructed = await contract.initialState(
-    createConstructorContext(privateState, services.coinPublicKey),
-    ...args,
+    createConstructorContext<EmitterPrivateState>(
+      { emitterSecret: new Uint8Array(32) },
+      services.coinPublicKey,
+    ),
+    authority,
   );
   const { block, ledgerParameters } = await services.currentParameters();
   const ttl = new Date((block.timestampSeconds + options.ttlSeconds) * 1000);
@@ -317,18 +306,18 @@ export const runDeploy = async (
   let record: DeploymentRecord = {
     kind: "deployment",
     stage: "built",
-    contract: profile.name,
-    access: profile.access,
+    example: profile.name,
+    eventName: profile.eventName,
     network: services.network,
     address: built.address,
     operations: built.operations,
     verifierKeySha256: built.verifierKeyHashes,
     maintenanceVerifyingKey,
-    ...(authority === undefined ? {} : { emitterAuthority: bytesToHex(authority) }),
+    emitterAuthority: bytesToHex(authority),
   };
   const save = (next: DeploymentRecord) => {
     record = next;
-    if (options.out !== undefined) writeRecord(options.out, record);
+    writeRecord(options.out, record);
   };
   save(record);
   services.log(`contract address   ${built.address} (recorded before submission)`);
@@ -352,7 +341,7 @@ export const runDeploy = async (
   const submittedId = await submitSavedTransaction(services.submitter, finalized, check, {
     requireProofs: services.requireProofs,
   });
-  save({ ...record, stage: "submitted", submittedId });
+  save({ ...record, stage: "submitted", finalized, submittedId });
   services.log(`submitted          ${submittedId}`);
   const inclusion = await services.waitForInclusion(finalized.identifiers, inclusionTimeout(ttl));
   if (inclusion === undefined) {
@@ -360,20 +349,22 @@ export const runDeploy = async (
       `the deployment was not seen before its TTL; inspect ${built.address} before trying again (never deploy twice blindly)`,
     );
   }
-  save({ ...record, stage: "included", inclusion });
+  save({ ...record, stage: "included", finalized, submittedId, inclusion });
   services.log(
     `included           ${inclusion.hash} at block ${String(inclusion.blockHeight)}, status ${inclusion.status}`,
   );
-  if (inclusion.status !== "SUCCESS")
+  if (inclusion.status !== "SUCCESS") {
     throw new CommandFailure(`deployment status ${inclusion.status}`);
+  }
   const stateBytes = await services.contractState(built.address);
-  if (stateBytes === undefined)
+  if (stateBytes === undefined) {
     throw new CommandFailure("the deployed contract is not visible yet");
+  }
   const deployed = ledger.ContractState.deserialize(stateBytes);
   for (const [circuit, hash] of Object.entries(built.verifierKeyHashes)) {
     const key = deployed.operation(circuit)?.verifierKey;
-    if (key === undefined || sha256(key) !== hash) {
-      throw new CommandFailure(`deployed ${circuit} verifier key differs from the repository's`);
+    if (key === undefined || verifierKeySha256(key) !== hash) {
+      throw new CommandFailure(`deployed ${circuit} verifier key differs from the committed one`);
     }
   }
   const committee = deployed.maintenanceAuthority.committee;
@@ -384,94 +375,288 @@ export const runDeploy = async (
   ) {
     throw new CommandFailure("the deployed maintenance authority is not the recorded key");
   }
-  if (authority !== undefined) {
-    const onChain = options.generated.ledger(
-      RuntimeContractState.deserialize(stateBytes).data,
-    ).emitterAuthority;
-    if (!(onChain instanceof Uint8Array) || !bytesEqual(onChain, authority)) {
-      throw new CommandFailure("the deployed emitter authority differs from the recorded one");
-    }
+  const onChain = options.generated.ledger(
+    RuntimeContractState.deserialize(stateBytes).data,
+  ).emitterAuthority;
+  if (!(onChain instanceof Uint8Array) || !bytesEqual(onChain, authority)) {
+    throw new CommandFailure("the deployed emitter authority differs from the recorded one");
   }
-  save({ ...record, stage: "verified", inclusion });
-  services.log(`verified           operations, verifier keys and maintenance authority`);
+  save({ ...record, stage: "verified", finalized, submittedId, inclusion });
+  services.log("verified           operations, verifier keys, maintenance authority, authority");
   return record;
 };
 
 // ----------------------------------------------------------------------------------
-// register (consumer)
+// publish
 // ----------------------------------------------------------------------------------
 
-/** Options of {@link runRegister}. */
-export interface RegisterOptions {
-  readonly profile: ContractProfile;
+/** Options of {@link runPublish}. */
+export interface PublishOptions {
+  readonly profile: ExampleProfile;
   readonly generated: GeneratedModule;
+  /** The deployed example. */
   readonly address: string;
-  readonly message: Uint8Array;
-  readonly ownerSecretFile: string;
-  /** Create a new owner secret file first. */
-  readonly createOwnerSecret?: boolean;
+  /** One payload per package, in order (several: one transaction, one intent each). */
+  readonly messages: readonly Uint8Array[];
+  /** The emitter secret file (the whitelist's witness). */
+  readonly secretFile: string;
+  readonly maxParts: number;
   readonly ttlSeconds: number;
-  readonly out?: string;
-  /** Provable circuits of the contract (to find `register<N>`). */
-  readonly circuits: readonly string[];
+  /** Largest fraction of a block any cost dimension may use (default 1). */
+  readonly maxBlockFraction?: number;
+  /** Public record, written before submission (must not exist yet). */
+  readonly out: string;
+  /** Build, prove, balance and record, but do not submit. */
+  readonly dryRun?: boolean;
 }
 
-/** Public registration record. */
-export interface RegistrationRecord {
-  readonly kind: "registration";
-  readonly network: string;
-  readonly address: string;
-  readonly circuit: string;
-  readonly requestId: string;
+/** One package's outcome after inclusion. */
+export interface PublishedPackage {
+  readonly segment: number;
   readonly parts: number;
-  readonly ownerCommitment: string;
+  /** The package verified from the included raw bytes: placement and merged payload. */
+  readonly verified: boolean;
+  readonly issues: readonly string[];
+}
+
+/** Public publication record. */
+export interface PublicationRecord {
+  readonly kind: "publication";
+  readonly stage: "finalized" | "submitted" | "included" | "verified";
+  readonly example: ExampleProfile["name"];
+  readonly eventName: string;
+  readonly network: string;
+  readonly contract: string;
+  /** Size and SHA-256 of each message (the payloads are public in `finalized`). */
+  readonly messages: readonly { readonly bytes: number; readonly sha256: string }[];
+  /** The finalized public bytes, identifiers and each package's intent. */
+  readonly finalized: FinalizedRecord;
+  /** Normalized cost of the finalized transaction (fractions of a block). */
+  readonly normalizedCost: Readonly<Record<string, number>>;
+  readonly submittedId?: string;
+  readonly inclusion?: IncludedTransaction;
+  /** Others merged intents into the transaction before inclusion. */
+  readonly merged?: boolean;
+  readonly packages?: readonly PublishedPackage[];
+}
+
+const sha256Hex = (bytes: Uint8Array): string => verifierKeySha256(bytes);
+
+/**
+ * Publish one or several messages to an example: one package per message, all
+ * packages in one transaction, one intent each; prove, balance, record the finalized
+ * public bytes, submit them once, wait for inclusion by identifier, locate every
+ * package's intent and verify each package from the included raw bytes.
+ */
+export const runPublish = async (
+  services: ChainServices,
+  options: PublishOptions,
+): Promise<PublicationRecord> => {
+  assertNewRecord(options.out);
+  if (options.messages.length === 0) throw new RangeError("give at least one message");
+  const secret = readWitnessSecret(options.secretFile);
+  try {
+    const contract = new options.generated.Contract(emitterWitnesses);
+    const emitPart = contract.impureCircuits[options.profile.entryPoint];
+    if (emitPart === undefined) {
+      throw new CommandFailure(`the contract has no ${options.profile.entryPoint} circuit`);
+    }
+    const binding = bindingFromContract<EmitterPrivateState, "emitPart">(
+      { impureCircuits: { emitPart: emitPart as unknown as EmitPartCircuit<EmitterPrivateState> } },
+      options.profile.entryPoint,
+      () => ({ emitterSecret: secret }),
+    );
+    const requests: PackageRequest<EmitterPrivateState>[] = options.messages.map((message) => ({
+      contract: options.address,
+      name: options.profile.eventName,
+      binding,
+      parts: splitPayload(message),
+    }));
+    const built = await buildPackagesTransaction(
+      services.stateSource,
+      {
+        network: services.network,
+        coinPublicKey: services.coinPublicKey,
+        maxParts: options.maxParts,
+        ttlSeconds: options.ttlSeconds,
+      },
+      requests,
+    );
+    services.log(
+      `built              ${String(built.packages.length)} package(s) (${built.packages.map((pkg) => `${String(pkg.parts.length)} part(s) at segment ${String(pkg.segment)}`).join(", ")}) on block ${String(built.block.height)}`,
+    );
+    const finalized = await finalizeTransactionPackages(
+      { prover: services.prover, balancer: services.balancer },
+      built,
+      {
+        proofTimeoutMs: services.proofTimeoutMs,
+        costCheck: blockFullnessCheck(options.maxBlockFraction ?? 1),
+        requireProofs: services.requireProofs,
+      },
+    );
+    const finalTx = deserializeFinal(hexToBytes(finalized.transactionHex), services.requireProofs);
+    const normalizedCost = {
+      ...built.ledgerParameters.normalizeFullness(finalTx.cost(built.ledgerParameters, true)),
+    };
+    let record: PublicationRecord = {
+      kind: "publication",
+      stage: "finalized",
+      example: options.profile.name,
+      eventName: options.profile.eventName,
+      network: services.network,
+      contract: options.address,
+      messages: options.messages.map((message) => ({
+        bytes: message.byteLength,
+        sha256: sha256Hex(message),
+      })),
+      finalized,
+      normalizedCost,
+    };
+    const save = (next: PublicationRecord) => {
+      record = next;
+      writeRecord(options.out, record);
+    };
+    save(record);
+    services.log(
+      `finalized          ${String(finalized.transactionHex.length / 2)} bytes; block usage ${normalizedCost.blockUsage?.toFixed(4) ?? "?"} of a block; recorded before submission`,
+    );
+    if (options.dryRun === true) return record;
+    const submittedId = await submitRecord(services.submitter, finalized, {
+      requireProofs: services.requireProofs,
+    });
+    save({ ...record, stage: "submitted", submittedId });
+    services.log(`submitted          ${submittedId}`);
+    const inclusion = await services.waitForInclusion(
+      finalized.identifiers,
+      inclusionTimeout(built.ttl),
+    );
+    if (inclusion === undefined) {
+      throw new CommandFailure(
+        "the publication was not seen before its TTL; it was not included. Inspect public state; do not resubmit blindly",
+      );
+    }
+    const included = deserializeTransaction(hexToBytes(inclusion.rawHex));
+    const location = locateRecord(included, finalized);
+    save({ ...record, stage: "included", inclusion, merged: location.merged });
+    if (!location.contains) {
+      throw new CommandFailure(
+        `the included transaction does not contain the packages: ${location.reason ?? ""}`,
+      );
+    }
+    const verification = verifyTransactionPackages(included, {
+      contract: options.address,
+      entryPoint: options.profile.entryPoint,
+      name: options.profile.eventName,
+      network: services.network,
+      status: inclusion.status,
+      transactionHash: inclusion.hash,
+    });
+    const packages: PublishedPackage[] = finalized.packages.map((pkg) => {
+      const expected = hexToBytes(pkg.partsHex.join(""));
+      const found = verification.packages.find((entry) => entry.package.segment === pkg.segment);
+      const issues = [
+        ...verification.issues,
+        ...(found === undefined ? ["no package at this segment"] : found.placement),
+        ...(found?.package.issues ?? []),
+      ];
+      const verified =
+        issues.length === 0 &&
+        found?.package.payload !== undefined &&
+        bytesEqual(found.package.payload, expected);
+      return {
+        segment: pkg.segment,
+        parts: pkg.partsHex.length,
+        verified,
+        issues: verified || issues.length > 0 ? issues : ["the merged payload differs"],
+      };
+    });
+    const allVerified = packages.every((pkg) => pkg.verified);
+    save({
+      ...record,
+      stage: allVerified ? "verified" : "included",
+      submittedId,
+      inclusion,
+      merged: location.merged,
+      packages,
+    });
+    services.log(
+      `included           ${inclusion.hash} at block ${String(inclusion.blockHeight)}, status ${inclusion.status}${location.merged ? " (others merged intents into it)" : ""}`,
+    );
+    for (const pkg of packages) {
+      services.log(
+        `package            segment ${String(pkg.segment)}, ${String(pkg.parts)} part(s): ${pkg.verified ? "verified from the raw bytes" : `NOT verified: ${pkg.issues.join("; ")}`}`,
+      );
+    }
+    if (!allVerified) throw new CommandFailure("a package did not verify from the raw bytes");
+    return record;
+  } finally {
+    secret.fill(0);
+  }
+};
+
+// ----------------------------------------------------------------------------------
+// pin (the notice board's state-changing circuit)
+// ----------------------------------------------------------------------------------
+
+/** Options of {@link runPin}. */
+export interface PinOptions {
+  readonly profile: ExampleProfile;
+  readonly generated: GeneratedModule;
+  /** The deployed notice board. */
+  readonly address: string;
+  /** The 32-byte digest to pin. */
+  readonly digest: Uint8Array;
+  readonly secretFile: string;
+  readonly ttlSeconds: number;
+  /** Public record, written before submission (must not exist yet). */
+  readonly out: string;
+}
+
+/** Public record of a pin. */
+export interface PinRecord {
+  readonly kind: "pin";
+  readonly stage: "finalized" | "submitted" | "included" | "verified";
+  readonly network: string;
+  readonly contract: string;
+  readonly digest: string;
   readonly finalized: FinalizedTransactionRecord;
   readonly submittedId?: string;
   readonly inclusion?: IncludedTransaction;
+  readonly pinnedCount?: string;
 }
 
 /**
- * Register a message with the consumer's `register<N>` in its own transaction (the
- * tails stay private in this proof; publishing in the same transaction would expose
- * them in the mempool before the registration lands).
+ * Call the notice board's `pin(digest)` in a transaction of its own (it writes state,
+ * so it is never batched with parts), then check the board's state.
  */
-export const runRegister = async (
-  services: ChainServices,
-  options: RegisterOptions,
-): Promise<RegistrationRecord> => {
-  const publication = encodePublication(options.message);
-  const parts = publication.parts.length;
-  const circuit = `register${String(parts)}`;
-  if (!options.circuits.includes(circuit)) {
-    const sizes = options.circuits.filter((name) => /^register\d+$/u.test(name));
-    throw new CommandFailure(
-      `the message has ${String(parts)} parts, but the contract exports no ${circuit} (it has ${sizes.join(", ") || "none"})`,
-    );
+export const runPin = async (services: ChainServices, options: PinOptions): Promise<PinRecord> => {
+  assertNewRecord(options.out);
+  if (options.profile.name !== "notice-board") {
+    throw new RangeError("pin is the notice board's circuit (--example notice-board)");
   }
-  if (options.createOwnerSecret === true) {
-    createWitnessSecretFile(
-      options.ownerSecretFile,
-      services.allowSecretsInRepository === true ? { allowInsideRepository: true } : {},
-    );
-  }
-  const secret = readWitnessSecret(options.ownerSecretFile);
-  const ownerCommitment = bytesToHex(messageOwnerOf(secret));
-  const contract = new options.generated.Contract(messageOwnerWitnesses);
-  const execute = contract.impureCircuits[circuit];
-  if (execute === undefined) throw new CommandFailure(`no circuit ${circuit}`);
+  if (options.digest.byteLength !== 32) throw new RangeError("the digest is 32 bytes");
+  const secret = readWitnessSecret(options.secretFile);
   try {
-    const built = await buildCircuitCallTransaction<unknown>(services.stateSource, {
+    const contract = new options.generated.Contract(emitterWitnesses);
+    const pin = contract.impureCircuits.pin;
+    if (pin === undefined) throw new CommandFailure("the contract has no pin circuit");
+    const before = await services.contractState(options.address);
+    const countOf = (state: Uint8Array | undefined): bigint | undefined => {
+      if (state === undefined) return undefined;
+      const count = options.generated.ledger(
+        RuntimeContractState.deserialize(state).data,
+      ).pinnedCount;
+      return typeof count === "bigint" ? count : undefined;
+    };
+    const countBefore = countOf(before);
+    const built = await buildCircuitCallTransaction<EmitterPrivateState>(services.stateSource, {
       network: services.network,
       address: options.address,
-      circuit,
+      circuit: "pin",
       coinPublicKey: services.coinPublicKey,
-      privateState: { messageOwnerSecret: secret },
-      execute: (context) =>
-        execute(
-          context,
-          publication.requestId,
-          publication.parts.map((part) => part.tail),
-        ),
+      privateState: { emitterSecret: secret },
+      execute: async (context) =>
+        (await pin(context, options.digest)) as CircuitResults<EmitterPrivateState, unknown>,
       ttlSeconds: options.ttlSeconds,
     });
     const check = callIntentCheck(built);
@@ -480,7 +665,7 @@ export const runRegister = async (
       built.transaction,
       {
         network: services.network,
-        purpose: circuit,
+        purpose: "pin",
         proofTimeoutMs: services.proofTimeoutMs,
         ttl: built.ttl,
         ledgerParameters: built.ledgerParameters,
@@ -490,210 +675,60 @@ export const runRegister = async (
         requireProofs: services.requireProofs,
       },
     );
-    let record: RegistrationRecord = {
-      kind: "registration",
+    let record: PinRecord = {
+      kind: "pin",
+      stage: "finalized",
       network: services.network,
-      address: options.address,
-      circuit,
-      requestId: bytesToHex(publication.requestId),
-      parts,
-      ownerCommitment,
+      contract: options.address,
+      digest: bytesToHex(options.digest),
       finalized,
     };
-    if (options.out !== undefined) writeRecord(options.out, record);
+    const save = (next: PinRecord) => {
+      record = next;
+      writeRecord(options.out, record);
+    };
+    save(record);
     const submittedId = await submitSavedTransaction(services.submitter, finalized, check, {
       requireProofs: services.requireProofs,
     });
-    record = { ...record, submittedId };
-    if (options.out !== undefined) writeRecord(options.out, record);
-    services.log(
-      `registration       ${circuit} for request ${record.requestId}, submitted ${submittedId}`,
-    );
+    save({ ...record, stage: "submitted", submittedId });
+    services.log(`submitted          pin ${bytesToHex(options.digest)}: ${submittedId}`);
     const inclusion = await services.waitForInclusion(
       finalized.identifiers,
       inclusionTimeout(built.ttl),
     );
     if (inclusion === undefined) {
-      throw new CommandFailure(
-        "the registration was not seen before its TTL; inspect public state",
-      );
+      throw new CommandFailure("the pin was not seen before its TTL; inspect public state");
     }
-    record = { ...record, inclusion };
-    if (options.out !== undefined) writeRecord(options.out, record);
-    if (inclusion.status !== "SUCCESS")
-      throw new CommandFailure(`registration status ${inclusion.status}`);
-    const stateBytes = await services.contractState(options.address);
-    const registry =
-      stateBytes === undefined
+    save({ ...record, stage: "included", submittedId, inclusion });
+    services.log(
+      `included           ${inclusion.hash} at block ${String(inclusion.blockHeight)}, status ${inclusion.status}`,
+    );
+    if (inclusion.status !== "SUCCESS") throw new CommandFailure(`pin status ${inclusion.status}`);
+    const after = await services.contractState(options.address);
+    const view =
+      after === undefined
         ? undefined
-        : (options.generated.ledger(RuntimeContractState.deserialize(stateBytes).data)
-            .messageOwner as {
-            member(key: Uint8Array): boolean;
-            lookup(key: Uint8Array): Uint8Array;
-          });
-    const stored =
-      registry?.member(publication.requestId) === true
-        ? registry.lookup(publication.requestId)
-        : undefined;
-    if (stored === undefined || bytesToHex(stored) !== ownerCommitment) {
-      throw new CommandFailure(
-        "the registry does not hold the owner commitment for this request id",
-      );
+        : options.generated.ledger(RuntimeContractState.deserialize(after).data);
+    const countAfter = countOf(after);
+    if (
+      view === undefined ||
+      !(view.pinnedDigest instanceof Uint8Array) ||
+      !bytesEqual(view.pinnedDigest, options.digest) ||
+      countAfter === undefined ||
+      (countBefore !== undefined && countAfter !== countBefore + 1n)
+    ) {
+      throw new CommandFailure("the board's state does not show the pin");
     }
-    services.log(
-      `included           ${inclusion.hash} at block ${String(inclusion.blockHeight)}; registry holds the owner commitment`,
-    );
-    return record;
-  } finally {
-    secret.fill(0);
-  }
-};
-
-// ----------------------------------------------------------------------------------
-// publish
-// ----------------------------------------------------------------------------------
-
-/** Options of {@link runPublish}. */
-export interface PublishOptions {
-  readonly profile: ContractProfile;
-  readonly generated: GeneratedModule;
-  readonly address: string;
-  readonly message: Uint8Array;
-  /** Whitelist: the emitter secret file; registry: the owner secret file. */
-  readonly secretFile: string;
-  readonly maxParts: number;
-  readonly ttlSeconds: number;
-  /** Largest fraction of a block any cost dimension may use (default 1). */
-  readonly maxBlockFraction?: number;
-  /** Where the finalized public record is written before submission. */
-  readonly recordOut?: string;
-  /** Build, prove, balance and record, but do not submit. */
-  readonly dryRun?: boolean;
-}
-
-/** Outcome of a publication. */
-export interface PublicationOutcome {
-  readonly kind: "publication";
-  readonly record: FinalizedPublication;
-  readonly normalizedCost: Readonly<Record<string, number>>;
-  readonly submittedId?: string;
-  readonly inclusion?: IncludedTransaction;
-  readonly merged?: boolean;
-  readonly verified?: boolean;
-}
-
-/**
- * Publish a message: build one aggregate guaranteed-only transaction, prove, balance,
- * record the finalized public bytes, submit them once, wait for inclusion by
- * identifier, and verify the included transaction from its raw bytes.
- */
-export const runPublish = async (
-  services: ChainServices,
-  options: PublishOptions,
-): Promise<PublicationOutcome> => {
-  const secret = readWitnessSecret(options.secretFile);
-  try {
-    const whitelist = options.profile.access === "whitelist";
-    const contract = new options.generated.Contract(
-      whitelist ? emitterWitnesses : messageOwnerWitnesses,
-    );
-    const emitPart = contract.impureCircuits.emitPart;
-    if (emitPart === undefined) throw new CommandFailure("the contract has no emitPart circuit");
-    const binding = bindingFromContract(
-      { impureCircuits: { emitPart: emitPart as unknown as EmitPartCircuit<object> } },
-      "emitPart",
-      () => (whitelist ? { emitterSecret: secret } : { messageOwnerSecret: secret }),
-    );
-    const publication = encodePublication(options.message);
-    const built = await buildPublicationTransaction(
-      services.stateSource,
-      binding,
-      {
-        network: services.network,
-        emitter: options.address,
-        coinPublicKey: services.coinPublicKey,
-        maxParts: options.maxParts,
-        ttlSeconds: options.ttlSeconds,
-      },
-      publication,
-    );
-    services.log(
-      `built              ${String(publication.parts.length)} parts, request ${bytesToHex(publication.requestId)}, segment ${String(built.expected.segment)}, block ${String(built.block.height)}`,
-    );
-    const record = await finalizePublication(
-      { prover: services.prover, balancer: services.balancer },
-      built,
-      {
-        proofTimeoutMs: services.proofTimeoutMs,
-        costCheck: blockFullnessCheck(options.maxBlockFraction ?? 1),
-        requireProofs: services.requireProofs,
-      },
-    );
-    const finalTx = deserializeTransaction(hexToBytes(record.transactionHex));
-    const normalizedCost = {
-      ...built.ledgerParameters.normalizeFullness(finalTx.cost(built.ledgerParameters, true)),
-    };
-    if (options.recordOut !== undefined)
-      writeRecord(options.recordOut, { kind: "publication", record, normalizedCost });
-    services.log(
-      `finalized          ${String(record.transactionHex.length / 2)} bytes; block usage ${normalizedCost.blockUsage?.toFixed(4) ?? "?"} of a block`,
-    );
-    if (options.dryRun === true) return { kind: "publication", record, normalizedCost };
-    const submittedId = await submitPublication(services.submitter, record, {
-      requireProofs: services.requireProofs,
-    });
-    services.log(`submitted          ${submittedId}`);
-    const inclusion = await services.waitForInclusion(
-      record.identifiers,
-      inclusionTimeout(built.ttl),
-    );
-    if (inclusion === undefined) {
-      if (options.recordOut !== undefined) {
-        writeRecord(options.recordOut, {
-          kind: "publication",
-          record,
-          normalizedCost,
-          submittedId,
-        });
-      }
-      throw new CommandFailure(
-        "the publication was not seen before its TTL; it was not included. Inspect public state; do not resubmit blindly",
-      );
-    }
-    const included = deserializeTransaction(hexToBytes(inclusion.rawHex));
-    const location = locatePublication(included, record);
-    if (!location.contains) {
-      throw new CommandFailure(
-        `the included transaction does not contain the publication: ${location.reason ?? ""}`,
-      );
-    }
-    const report = verifyPublicationTransaction(included, {
-      emitter: options.address,
-      entryPoint: "emitPart",
-      network: services.network,
-      status: inclusion.status,
-      transactionHash: inclusion.hash,
-    });
-    const verified =
-      report.issues.length === 0 &&
-      report.accepted.some(
-        (result) => result.message !== undefined && bytesEqual(result.message, options.message),
-      );
-    const outcome: PublicationOutcome = {
-      kind: "publication",
-      record,
-      normalizedCost,
+    save({
+      ...record,
+      stage: "verified",
       submittedId,
       inclusion,
-      merged: location.merged,
-      verified,
-    };
-    if (options.recordOut !== undefined) writeRecord(options.recordOut, outcome);
-    services.log(
-      `included           ${inclusion.hash} at block ${String(inclusion.blockHeight)}, status ${inclusion.status}${location.merged ? " (merged by others)" : ""}; verified from raw bytes: ${verified ? "yes" : "NO"}`,
-    );
-    if (!verified) throw new CommandFailure(`verification failed: ${report.issues.join("; ")}`);
-    return outcome;
+      pinnedCount: countAfter.toString(),
+    });
+    services.log(`verified           pinnedDigest set; pinnedCount ${countAfter.toString()}`);
+    return record;
   } finally {
     secret.fill(0);
   }
