@@ -1,6 +1,6 @@
 /**
- * Finalize and submit transactions other than publications (a deployment, a
- * registration or a release) with the same discipline as publications: one proof, one
+ * Finalize and submit transactions other than packages (a deployment, or a call of a
+ * state-changing circuit) with the same discipline as packages: one proof, one
  * balancing, a caller-supplied intent check before proving, after proving, after
  * balancing and after a serialization round trip, the cost check against the pinned
  * ledger parameters, and submission of exactly the saved bytes.
@@ -9,22 +9,19 @@
  */
 import * as ledger from "@midnightntwrk/ledger-v9";
 
-import { bytesToHex, hexToBytes } from "../codec/bytes.js";
-import {
-  type AnyTransaction,
-  deserializeTransaction,
-  transactionHashOf,
-} from "../codec/raw-transaction.js";
+import { bytesToHex, hexToBytes } from "../reader/bytes.js";
+import { type AnyTransaction, transactionHashOf } from "../reader/transaction.js";
 import {
   blockFullnessCheck,
   type CostCheck,
+  deserializeFinal,
   type PublicationBalancer,
   type PublicationProver,
   type PublicationSubmitter,
 } from "./finalize.js";
-import { PublicationCheckError } from "./guard.js";
+import { PackageCheckError } from "./guard.js";
 
-/** Checks the caller's own intent at one stage; throws {@link PublicationCheckError}. */
+/** Checks the caller's own intent at one stage; throws {@link PackageCheckError}. */
 export type IntentCheck = (tx: AnyTransaction, stage: string) => void;
 
 /** The public record of a finalized transaction (JSON-safe). */
@@ -57,21 +54,9 @@ export interface FinalizeTransactionOptions {
 
 const requireTransaction = (value: unknown, stage: string, provider: string): void => {
   if (!(value instanceof ledger.Transaction)) {
-    throw new PublicationCheckError(
+    throw new PackageCheckError(
       stage,
       `the ${provider} did not return a ledger-v9 transaction of this process`,
-    );
-  }
-};
-
-const deserializeFinal = (bytes: Uint8Array, requireProofs: boolean): AnyTransaction => {
-  if (!requireProofs) return deserializeTransaction(bytes);
-  try {
-    return ledger.Transaction.deserialize("signature", "proof", "binding", bytes);
-  } catch (error) {
-    throw new PublicationCheckError(
-      "after serialization",
-      `bytes are not a proven, bound transaction: ${error instanceof Error ? error.message : String(error)}`,
     );
   }
 };
@@ -125,17 +110,18 @@ export const submitSavedTransaction = async (
   const snapshot = deserializeFinal(
     hexToBytes(record.transactionHex),
     options.requireProofs ?? true,
+    stage,
   );
   check(snapshot, stage);
   if ((transactionHashOf(snapshot) ?? null) !== record.transactionHash) {
-    throw new PublicationCheckError(stage, "saved bytes do not match the recorded hash");
+    throw new PackageCheckError(stage, "saved bytes do not match the recorded hash");
   }
   const identifiers = snapshot.identifiers();
   if (
     identifiers.length !== record.identifiers.length ||
     identifiers.some((identifier, index) => identifier !== record.identifiers[index])
   ) {
-    throw new PublicationCheckError(stage, "saved bytes do not match the recorded identifiers");
+    throw new PackageCheckError(stage, "saved bytes do not match the recorded identifiers");
   }
   return await submitter.submitTx(snapshot as ledger.FinalizedTransaction);
 };

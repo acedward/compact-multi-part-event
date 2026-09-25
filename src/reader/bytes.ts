@@ -1,15 +1,10 @@
-/** Small byte helpers shared by the codec modules (no dependencies). */
+/** Small byte helpers shared by the reader and the publisher (no dependencies). */
 
 export const bytesEqual = (left: Uint8Array, right: Uint8Array): boolean => {
   if (left.byteLength !== right.byteLength) return false;
   for (let index = 0; index < left.byteLength; index += 1) {
     if (left[index] !== right[index]) return false;
   }
-  return true;
-};
-
-export const allZero = (bytes: Uint8Array): boolean => {
-  for (const byte of bytes) if (byte !== 0) return false;
   return true;
 };
 
@@ -40,14 +35,3 @@ export const hexToBytes = (hex: string): Uint8Array => {
 /** Code-unit string order, independent of locale (unlike `localeCompare`). */
 export const compareCodeUnits = (left: string, right: string): number =>
   left < right ? -1 : left > right ? 1 : 0;
-
-/** Read a uint64 little-endian field as a bigint. */
-export const readUint64LittleEndian = (bytes: Uint8Array, offset: number): bigint => {
-  let value = 0n;
-  for (let index = 7; index >= 0; index -= 1) {
-    const byte = bytes[offset + index];
-    if (byte === undefined) throw new RangeError("truncated uint64 field");
-    value = (value << 8n) | BigInt(byte);
-  }
-  return value;
-};
