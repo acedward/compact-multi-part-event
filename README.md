@@ -74,7 +74,32 @@ For the author of a protocol and its contracts. The library and `cmse` need Node
 
    Without `--tx`, `verify` lists and verifies every package of the (contract, N), paging through the contract's `Misc` events. `--segment <n>` picks one package of a transaction. `--raw-file <file> --status SUCCESS [--state-file <file>]` verifies saved bytes offline. `--json` prints the report; run it as `npm run -s cmse -- …` so npm's header stays off stdout. Proofs are not verified again: inclusion means the network verified them. `npm run cmse -- --help` lists every flag.
 
-5. **Run the checks.** `scripts/check.sh` runs everything in Docker: install from the lockfile, the pinned packages, compilation, key regeneration against the committed hashes (with each circuit's size), format, type-aware lint, typecheck, build, tests, the notice board's separate-project build, and the repository check (label policy over the full history, and the file layout). `scripts/check.sh --fresh-clone` does the same from a clean clone.
+5. **Check a live package.** Both examples run on stagenet, deployed and exercised with `deploy-tools`: the reference emitter at `717ae53b7559d3f90e78639ff13ee09571480f5b51a09bea901bf44a398aff46` and the notice board at `c6e33a04cfeaee77f65e87127801443fad234d75d40d8c4b3c9bac6e37478335`. Transaction `ea9a10587113ddf67cfae81770b4e22e33a18f053c69aaf5c4811e423c7722d8`, in block 610186, holds a package of four parts (1,000 bytes, the last part zero-padded). From a clone, after `npm ci && npm run build`:
+
+   ```sh
+   npm run -s cmse -- verify --example emitter \
+     --contract 717ae53b7559d3f90e78639ff13ee09571480f5b51a09bea901bf44a398aff46 \
+     --tx ea9a10587113ddf67cfae81770b4e22e33a18f053c69aaf5c4811e423c7722d8 \
+     --node https://rpc.stagenet.shielded.tools
+   ```
+
+   exits 0 and prints, after the source, contract, name, transaction and expected key:
+
+   ```text
+   package     transaction ea9a10587113ddf67cfae81770b4e22e33a18f053c69aaf5c4811e423c7722d8, segment 25599, block 610186
+     L1 OK   4 part(s), 1024 bytes, payload SHA-256 953bffde819941614fa6a0b245955707bc94111cc1fd04d197f75911558170d8
+     L2 OK   included, status SUCCESS
+     L2 OK   the raw bytes hash to the transaction
+     L2 OK   the node's block 610186 holds the raw bytes (extrinsic 3)
+     L2 OK   every emitPart call in the intent at segment 25599 is guaranteed-only and logs these 4 part(s), in order
+     L3 OK   the deployed emitPart verifier key at block 610186 equals the expected one (SHA-256 b25a6c6a565fde435afeacbae73434a9db2730f871e53da589395a27144842d7)
+     verified to level 3
+   result      1 package(s); verified to level 3 of 3 — and the code: the deployed emitting circuit's verifier key is the committed one
+   ```
+
+   Without `--tx` it lists and verifies every package the emitter has published, among them the two packages, in two intents, of transaction `75c7cab734175deb00264c13ee975bef57c8a2d31ce36441e76ca4d793f1422a`. The notice board's notices verify the same way with `--example notice-board`.
+
+6. **Run the checks.** `scripts/check.sh` runs everything in Docker: install from the lockfile, the pinned packages, compilation, key regeneration against the committed hashes (with each circuit's size), format, type-aware lint, typecheck, build, tests, the notice board's separate-project build, and the repository check (label policy over the full history, and the file layout). `scripts/check.sh --fresh-clone` does the same from a clean clone.
 
 ## Spec
 
