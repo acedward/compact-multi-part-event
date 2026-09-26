@@ -67,7 +67,7 @@ Events from different chains, contract addresses, event names, physical intents,
 
 ### 4. Publisher requirements and atomicity
 
-All matching events that a publisher places in the same physical intent would form one package when applied, even if the publisher regards them as separate logical messages. The publisher MUST place all of those events in one execution phase. It MUST preserve the intended byte order when it emits them. The parts MAY be produced by one call or several calls, and a call MAY emit more than one matching event.
+All matching events that a publisher places in the same physical intent share the same physical segment number within the transaction and would form one package when applied, even if the publisher regards them as separate logical messages. The publisher MUST place all of those events in one execution phase. It MUST preserve the intended byte order when it emits them. The parts MAY be produced by one call or several calls, and a call MAY emit more than one matching event.
 
 A publisher SHOULD use the guaranteed phase. Guaranteed placement avoids a fallible execution failure that produces no package. Guaranteed placement is a recommendation, not a condition for this transport rule.
 
